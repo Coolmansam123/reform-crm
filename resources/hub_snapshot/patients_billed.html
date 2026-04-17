@@ -1,0 +1,1076 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Billed Cases — Reform Hub</title><style>
+:root {
+  --bg:          #0d1b2a;
+  --bg2:         #0a1628;
+  --border:      #1e3a5f;
+  --hdr-grad:    linear-gradient(135deg,#0f3460,#16213e);
+  --text:        #e2e8f0;
+  --text2:       #94a3b8;
+  --text3:       #64748b;
+  --text4:       #475569;
+  --card:        rgba(255,255,255,0.04);
+  --card-hover:  rgba(255,255,255,0.08);
+  --nav-active:  #1e3a5f;
+  --badge-bg:    rgba(30,58,95,0.8);
+  --input-bg:    #0d1b2a;
+  --chip-border: #1e3a5f;
+  --shadow:      0 2px 8px rgba(0,0,0,0.3);
+}
+[data-theme="light"] {
+  --bg:          #f1f5f9;
+  --bg2:         #ffffff;
+  --border:      #e2e8f0;
+  --hdr-grad:    linear-gradient(135deg,#2563eb,#1d4ed8);
+  --text:        #0f172a;
+  --text2:       #334155;
+  --text3:       #64748b;
+  --text4:       #94a3b8;
+  --card:        #ffffff;
+  --card-hover:  #f8fafc;
+  --nav-active:  #dbeafe;
+  --badge-bg:    #e2e8f0;
+  --input-bg:    #f8fafc;
+  --chip-border: #e2e8f0;
+  --shadow:      0 2px 8px rgba(0,0,0,0.08);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); display:block; min-height:100vh; transition:background 0.2s,color 0.2s; }
+a { color:inherit; text-decoration:none; }
+
+/* Top Nav */
+.tnav { position:sticky; top:0; z-index:800; background:var(--bg2); border-bottom:1px solid var(--border);
+        display:flex; align-items:center; height:48px; padding:0 20px; gap:4px; }
+.tnav-logo { font-size:14px; font-weight:700; color:var(--text); margin-right:8px; white-space:nowrap; text-decoration:none; }
+.tnav-logo span { font-size:10px; color:var(--text3); font-weight:400; margin-left:4px; }
+.tnav-items { display:flex; align-items:center; gap:2px; flex:1; }
+.tnav-right { display:flex; align-items:center; gap:8px; margin-left:auto; }
+.tnav-btn { padding:5px 11px; border-radius:6px; font-size:13px; color:var(--text2);
+            background:none; border:none; cursor:pointer; white-space:nowrap;
+            display:flex; align-items:center; gap:3px; height:34px; font-family:inherit;
+            text-decoration:none; transition:background 0.12s, color 0.12s; }
+.tnav-btn:hover { background:var(--card-hover); color:var(--text); }
+.tnav-btn.active { color:var(--text); font-weight:600; border-bottom:2px solid #ea580c; border-radius:0; }
+.tnav-menu { position:relative; }
+.tnav-menu:hover .tnav-drop { display:block; }
+.tnav-drop { display:none; position:absolute; top:calc(100% + 1px); left:0; min-width:200px;
+             background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+             box-shadow:0 8px 24px rgba(0,0,0,0.35); padding:6px 0; z-index:900; }
+.tnav-drop a { display:flex; align-items:center; padding:8px 16px; font-size:13px;
+               color:var(--text2); gap:7px; }
+.tnav-drop a:hover { background:var(--card-hover); color:var(--text); }
+.tnav-drop a.active { background:var(--nav-active); color:var(--text); font-weight:600; }
+[data-theme="light"] .tnav-drop a.active { color:#1d4ed8; }
+.tnav-sep { height:1px; background:var(--border); margin:5px 0; }
+.tnav-grp-lbl { padding:6px 16px 2px; font-size:10px; font-weight:700; color:var(--text4);
+                text-transform:uppercase; letter-spacing:0.8px; }
+a.tnav-grp-lbl { display:flex; align-items:center; gap:7px; padding:8px 16px 6px;
+                 cursor:pointer; text-decoration:none; }
+a.tnav-grp-lbl:hover { background:var(--card-hover); color:var(--text); }
+a.tnav-grp-lbl.active { background:var(--nav-active); color:var(--text); }
+[data-theme="light"] a.tnav-grp-lbl.active { color:#1d4ed8; }
+.tnav-theme-btn { background:none; border:none; color:var(--text3); font-size:16px;
+                  cursor:pointer; padding:4px 8px; border-radius:6px; font-family:inherit; }
+.tnav-theme-btn:hover { background:var(--card-hover); color:var(--text); }
+.tnav-user { font-size:12px; color:var(--text3); padding:4px 8px; }
+.tnav-signout { font-size:12px; color:var(--text3); padding:5px 10px; border-radius:6px;
+                border:1px solid var(--border); }
+.tnav-signout:hover { color:var(--text); background:var(--card-hover); }
+
+/* Main */
+.main { width:100%; overflow-y:auto; min-width:0; }
+
+/* Gorilla Map Sidebar Tabs */
+.sb-tabs { display:flex; border-bottom:1px solid var(--border); background:var(--bg2); }
+.sb-tab  { flex:1; padding:10px 6px; font-size:12px; font-weight:600; color:var(--text3);
+           text-align:center; cursor:pointer; border-bottom:2px solid transparent;
+           transition:color 0.12s, border-color 0.12s; }
+.sb-tab:hover { color:var(--text); }
+.sb-tab.active { color:#ea580c; border-bottom-color:#ea580c; }
+.sb-panel { display:none; padding:14px; }
+.sb-panel.active { display:block; }
+.sb-section-lbl { font-size:10px; font-weight:700; color:var(--text4);
+                   text-transform:uppercase; letter-spacing:0.6px; margin-bottom:5px; }
+.sb-status-badge { display:inline-flex; align-items:center; gap:5px; padding:4px 10px;
+                   border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;
+                   border:1px solid var(--border); background:var(--card); color:var(--text2); }
+.sb-status-badge:hover { background:var(--card-hover); }
+.sb-inline-select { display:none; width:100%; margin-top:6px; background:var(--input-bg);
+                    border:1px solid var(--border); color:var(--text); border-radius:6px;
+                    padding:5px 8px; font-size:12px; }
+.sb-act-item { padding:7px 0; border-bottom:1px solid rgba(30,58,95,0.3); font-size:12px; }
+.sb-act-item:last-child { border-bottom:none; }
+.sb-act-type { font-weight:600; color:var(--text); }
+.sb-act-meta { color:var(--text3); font-size:11px; margin-top:2px; }
+.sb-log-grid { display:grid; gap:6px; margin-top:8px; }
+.sb-log-grid select, .sb-log-grid input, .sb-log-grid textarea {
+  background:var(--input-bg); border:1px solid var(--border); color:var(--text);
+  border-radius:6px; padding:6px 8px; font-size:12px; font-family:inherit; width:100%; outline:none; }
+.sb-log-grid textarea { min-height:56px; resize:vertical; }
+.sb-log-btn { width:100%; margin-top:6px; padding:8px; background:#3b82f6; color:#fff;
+              border:none; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer; }
+.sb-log-btn:hover { background:#2563eb; }
+.sb-evt-item { padding:8px 0; border-bottom:1px solid rgba(30,58,95,0.3); font-size:12px; }
+.sb-evt-item:last-child { border-bottom:none; }
+
+.header { background:var(--hdr-grad); border-bottom:1px solid var(--border); padding:10px 28px; display:flex; align-items:center; justify-content:space-between; }
+.header-left h1 { font-size:16px; font-weight:700; color:#fff; }
+.header-left .sub { font-size:11px; color:rgba(255,255,255,0.6); margin-top:2px; }
+.header-right { display:flex; align-items:center; gap:10px; }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:7px 13px; border-radius:7px; font-size:12px; font-weight:500; cursor:pointer; border:none; transition:all 0.12s; }
+.btn-ghost { background:rgba(255,255,255,0.15); color:#fff; }
+.btn-ghost:hover { background:rgba(255,255,255,0.25); }
+.content { padding:22px 28px; }
+
+/* Stats row */
+.stats-row { display:flex; gap:12px; margin-bottom:22px; flex-wrap:wrap; }
+.stat-chip { flex:1; min-width:120px; background:var(--card); border:1px solid var(--chip-border); border-radius:10px; padding:14px 16px; }
+.stat-chip .label { font-size:10px; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:5px; }
+.stat-chip .value { font-size:28px; font-weight:700; color:var(--text); }
+.stat-chip.c-purple .value { color:#a78bfa; }
+.stat-chip.c-green  .value { color:#34d399; }
+.stat-chip.c-red    .value { color:#f87171; }
+.stat-chip.c-yellow .value { color:#fbbf24; }
+.stat-chip.c-orange .value { color:#fb923c; }
+.stat-chip.c-blue   .value { color:#60a5fa; }
+
+/* Tool cards */
+.tool-cards { display:flex; gap:14px; margin-bottom:22px; flex-wrap:wrap; }
+.tool-card { flex:1; min-width:190px; background:var(--card); border:1px solid var(--chip-border); border-radius:12px; padding:18px 20px; box-shadow:var(--shadow); }
+.tc-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+.tc-name { font-size:14px; font-weight:700; }
+.tc-pill { font-size:10px; padding:3px 8px; border-radius:10px; font-weight:600; }
+.tc-stats { display:flex; gap:20px; margin-bottom:12px; }
+.tc-stat .n { font-size:22px; font-weight:700; }
+.tc-stat .l { font-size:11px; color:var(--text3); margin-top:1px; }
+.prog-wrap { background:var(--border); border-radius:4px; height:6px; overflow:hidden; margin-bottom:12px; }
+.prog-fill { height:100%; border-radius:4px; transition:width 0.4s; }
+.tc-btn { display:block; text-align:center; padding:7px; border-radius:7px; font-size:12px; font-weight:600; background:var(--card-hover); border:1px solid var(--border); }
+.tc-btn:hover { background:var(--nav-active); }
+
+/* Two-column */
+.two-col { display:flex; gap:14px; }
+.col-l { flex:55; min-width:0; }
+.col-r { flex:45; min-width:0; }
+
+/* Panel */
+.panel { background:var(--card); border:1px solid var(--chip-border); border-radius:12px; margin-bottom:16px; box-shadow:var(--shadow); }
+.panel-hd { padding:13px 18px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+.panel-title { font-size:14px; font-weight:700; }
+.panel-ct { font-size:12px; color:var(--text3); }
+.panel-body { padding:4px 0; }
+
+/* Alert rows */
+.a-row { display:flex; align-items:center; gap:10px; padding:9px 18px; border-bottom:1px solid rgba(30,58,95,0.3); }
+.a-row:last-child { border-bottom:none; }
+.dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.dot-r { background:#ef4444; }
+.dot-y { background:#f59e0b; }
+.dot-g { background:#10b981; }
+.a-name { font-size:13px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.a-meta { font-size:11px; color:var(--text3); flex-shrink:0; }
+.badge { font-size:10px; padding:2px 7px; border-radius:8px; font-weight:600; flex-shrink:0; }
+.b-pi  { background:rgba(124,58,237,0.2); color:#a78bfa; }
+.b-gor { background:rgba(234,88,12,0.2);  color:#fb923c; }
+.b-com { background:rgba(5,150,105,0.2);  color:#34d399; }
+.date-badge { font-size:10px; background:var(--badge-bg); color:var(--text2); padding:2px 8px; border-radius:6px; flex-shrink:0; }
+
+/* Pipeline */
+.pipeline { padding:14px 18px; }
+.pipe-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.pipe-label { width:170px; font-size:12px; color:var(--text2); flex-shrink:0; }
+.pipe-bar { flex:1; background:var(--border); border-radius:4px; height:10px; overflow:hidden; }
+.pipe-fill { height:100%; border-radius:4px; transition:width 0.4s; }
+.pipe-n { font-size:12px; color:var(--text2); width:40px; text-align:right; flex-shrink:0; }
+.pipe-pct { font-size:11px; color:var(--text4); width:38px; text-align:right; flex-shrink:0; }
+
+/* Activity rows */
+.act-row { display:flex; gap:10px; padding:9px 18px; border-bottom:1px solid rgba(30,58,95,0.3); align-items:flex-start; }
+.act-row:last-child { border-bottom:none; }
+.act-date { font-size:11px; color:var(--text3); width:64px; flex-shrink:0; padding-top:2px; }
+.act-body { flex:1; min-width:0; }
+.act-name { font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.act-type { font-size:11px; color:var(--text3); margin-top:1px; }
+
+/* Type breakdown */
+.type-row { display:flex; align-items:center; justify-content:space-between; padding:8px 18px; border-bottom:1px solid rgba(30,58,95,0.3); }
+.type-row:last-child { border-bottom:none; }
+.type-name { font-size:13px; }
+.type-n { font-size:13px; font-weight:600; color:var(--text2); }
+
+/* Empty / loading */
+.empty   { padding:24px; text-align:center; color:var(--text4); font-size:13px; }
+.loading { padding:32px; text-align:center; color:var(--text4); font-size:13px; }
+
+/* Login */
+body.login-body { display:block; }
+.login-wrap { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+.login-box { background:#0a1628; border:1px solid #1e3a5f; border-radius:16px; padding:40px; width:340px; }
+.login-box h1 { font-size:22px; font-weight:700; margin-bottom:6px; }
+.login-box .sub { font-size:13px; color:#64748b; margin-bottom:28px; }
+.google-btn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:11px; background:#fff; color:#333; border:1px solid #ddd; border-radius:8px; font-size:14px; font-weight:500; cursor:pointer; text-decoration:none; transition:background 0.12s; }
+.google-btn:hover { background:#f5f5f5; }
+.login-err { color:#ef4444; font-size:13px; margin-top:14px; text-align:center; }
+/* Compose modal */
+.compose-ac-list{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d1d5db;border-top:none;border-radius:0 0 7px 7px;max-height:200px;overflow-y:auto;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,0.1)}
+.compose-ac-list.open{display:block}
+.compose-ac-item{padding:8px 12px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.compose-ac-item:hover,.compose-ac-item.sel{background:#eff6ff}
+.compose-ac-name{font-weight:600;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.compose-ac-email{color:#64748b;font-size:11px;white-space:nowrap}
+.compose-fab { position:fixed; bottom:28px; right:28px; width:52px; height:52px; border-radius:50%; background:#3b82f6; color:#fff; border:none; font-size:22px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(59,130,246,0.5); z-index:900; transition:background 0.12s; }
+.compose-fab:hover { background:#2563eb; }
+.compose-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:950; align-items:center; justify-content:center; }
+.compose-overlay.open { display:flex; }
+.compose-box { background:#ffffff; border:1px solid #e2e8f0; border-radius:14px; padding:0; width:580px; max-width:95vw; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.25); }
+.compose-header { display:flex; justify-content:space-between; align-items:center; padding:16px 22px; border-bottom:1px solid #e2e8f0; }
+.compose-header h3 { font-size:15px; font-weight:700; color:#1e293b; margin:0; }
+.compose-header .compose-close { background:none; border:none; font-size:18px; color:#94a3b8; cursor:pointer; padding:4px; line-height:1; }
+.compose-header .compose-close:hover { color:#475569; }
+.compose-fields { padding:16px 22px 0; display:flex; flex-direction:column; gap:8px; }
+.compose-field-row { display:flex; align-items:center; gap:0; border-bottom:1px solid #f1f5f9; padding-bottom:8px; }
+.compose-field-label { font-size:12px; font-weight:600; color:#94a3b8; width:36px; flex-shrink:0; }
+.compose-box input { width:100%; padding:6px 0; background:transparent; border:none; color:#1e293b; font-size:13px; outline:none; font-family:inherit; }
+.compose-box input::placeholder { color:#94a3b8; }
+.compose-ccbcc-toggle { font-size:11px; color:#3b82f6; cursor:pointer; white-space:nowrap; margin-left:auto; }
+.compose-ccbcc-toggle:hover { text-decoration:underline; }
+.compose-ccbcc { display:none; }
+.compose-ccbcc.open { display:flex; flex-direction:column; gap:8px; }
+.compose-body-wrap { padding:12px 22px; flex:1; }
+.compose-box textarea { width:100%; padding:0; background:transparent; border:none; color:#1e293b; font-size:13px; outline:none; font-family:inherit; min-height:180px; resize:none; line-height:1.6; }
+.compose-box textarea::placeholder { color:#94a3b8; }
+.compose-sig { padding:0 22px 8px; font-size:11px; color:#94a3b8; line-height:1.5; border-top:1px solid #f1f5f9; padding-top:10px; }
+.compose-toolbar { display:flex; align-items:center; gap:8px; padding:12px 22px; border-top:1px solid #e2e8f0; }
+.compose-template-sel { padding:6px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:12px; color:#475569; background:#f8fafc; cursor:pointer; outline:none; }
+.compose-toolbar .spacer { flex:1; }
+.compose-actions { display:flex; gap:8px; align-items:center; }
+.compose-actions button { padding:8px 18px; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer; border:none; }
+.btn-send { background:#3b82f6; color:#fff; transition:background .12s; }
+.btn-send:hover { background:#2563eb; }
+.btn-cancel { background:#f1f5f9; color:#64748b; }
+.btn-cancel:hover { background:#e2e8f0; }
+.compose-status { font-size:12px; min-height:16px; display:flex; align-items:center; gap:6px; }
+.compose-undo { background:none; border:none; color:#3b82f6; font-size:12px; font-weight:600; cursor:pointer; text-decoration:underline; }
+.btn-cancel:hover { background:rgba(255,255,255,0.12); }
+.compose-status { font-size:12px; color:#94a3b8; text-align:right; min-height:16px; }
+
+/* Data table */
+.data-table { width:100%; border-collapse:collapse; font-size:13px; }
+.data-table th { text-align:left; padding:10px 14px; font-size:11px; font-weight:600; color:var(--text3); text-transform:uppercase; border-bottom:1px solid var(--border); }
+.data-table th.r { text-align:right; }
+.data-table th.c { text-align:center; }
+.data-table td { padding:9px 14px; border-bottom:1px solid rgba(30,58,95,0.3); color:var(--text); }
+.data-table td.r { text-align:right; }
+.data-table td.c { text-align:center; }
+.data-table tr:last-child td { border-bottom:none; }
+.data-table tr:hover td { background:var(--card-hover); }
+
+/* Filter bar */
+.filter-bar { padding:14px 18px 10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; border-bottom:1px solid var(--border); }
+.filter-btn { padding:4px 12px; border-radius:20px; font-size:12px; font-weight:500; border:1px solid var(--border); background:var(--card); color:var(--text2); cursor:pointer; transition:all 0.12s; }
+.filter-btn:hover,.filter-btn.on { background:var(--nav-active); color:var(--text); border-color:transparent; }
+.view-toggle { display:flex; gap:4px; margin-left:auto; flex-shrink:0; }
+.view-btn { padding:4px 12px; border-radius:20px; font-size:12px; font-weight:500; border:1px solid var(--border); background:var(--card); color:var(--text2); cursor:pointer; transition:all 0.12s; }
+.view-btn.on { background:#3b82f6; color:#fff; border-color:#3b82f6; }
+.search-input { flex:1; min-width:160px; padding:6px 12px; border-radius:20px; border:1px solid var(--border); background:var(--input-bg); color:var(--text); font-size:12px; outline:none; }
+.search-input:focus { border-color:#3b82f6; }
+
+/* Venue directory */
+.venue-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; padding:16px 18px; }
+.venue-card { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:14px 16px; transition:box-shadow 0.12s; }
+.venue-card:hover { box-shadow:var(--shadow); }
+.vc-name { font-size:13px; font-weight:600; margin-bottom:6px; }
+.vc-type { font-size:11px; color:var(--text3); margin-bottom:8px; }
+.vc-row { display:flex; gap:6px; align-items:flex-start; margin-bottom:4px; font-size:12px; color:var(--text2); }
+.vc-icon { flex-shrink:0; color:var(--text4); width:14px; }
+.vc-foot { display:flex; gap:6px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+.status-badge { font-size:10px; padding:2px 8px; border-radius:8px; font-weight:600; flex-shrink:0; }
+.sb-not  { background:rgba(71,85,105,0.2);  color:#94a3b8; }
+.sb-cont { background:rgba(37,99,235,0.2);  color:#60a5fa; }
+.sb-disc { background:rgba(217,119,6,0.2);  color:#fbbf24; }
+.sb-act  { background:rgba(5,150,105,0.2);  color:#34d399; }
+
+/* Rolodex (patients) */
+.rolodex-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; padding:16px 18px; }
+.patient-card { background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:16px 18px; transition:box-shadow 0.12s,border-color 0.12s; cursor:pointer; }
+.patient-card:hover { box-shadow:var(--shadow); border-color:rgba(37,99,235,0.4); }
+.pc-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+.pc-name { font-size:14px; font-weight:700; line-height:1.3; }
+.pc-stage { font-size:10px; padding:3px 9px; border-radius:10px; font-weight:700; flex-shrink:0; margin-left:8px; }
+.stage-active   { background:rgba(124,58,237,0.2); color:#a78bfa; }
+.stage-billed   { background:rgba(217,119,6,0.2);  color:#fbbf24; }
+.stage-awaiting { background:rgba(37,99,235,0.2);  color:#60a5fa; }
+.stage-closed   { background:rgba(5,150,105,0.2);  color:#34d399; }
+.pc-row { display:flex; gap:14px; margin-bottom:6px; font-size:12px; }
+.pc-lbl { color:var(--text4); width:90px; flex-shrink:0; }
+.pc-val { color:var(--text2); flex:1; }
+.pc-divider { height:1px; background:var(--border); margin:10px 0; }
+
+/* ── Contact Detail Modal ── */
+.cd-overlay {
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+  z-index:940; align-items:flex-start; justify-content:center;
+  overflow-y:auto; padding:40px 16px;
+}
+.cd-overlay.open { display:flex; }
+.cd-modal {
+  background:var(--bg2); border:1px solid var(--border); border-radius:14px;
+  width:560px; max-width:100%; display:flex; flex-direction:column;
+  box-shadow:0 20px 60px rgba(0,0,0,0.5); overflow:hidden; flex-shrink:0;
+}
+.cd-header {
+  display:flex; align-items:flex-start; justify-content:space-between;
+  padding:16px 18px 12px; border-bottom:1px solid var(--border);
+  background:var(--hdr-grad);
+}
+.cd-title { font-size:15px; font-weight:700; color:#fff; line-height:1.3; margin-bottom:4px; }
+.cd-header-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; margin-left:10px; }
+.cd-btn-email {
+  background:rgba(59,130,246,0.25); border:1px solid rgba(59,130,246,0.5);
+  color:#93c5fd; border-radius:8px; padding:5px 10px; font-size:13px;
+  cursor:pointer; transition:background 0.12s; white-space:nowrap; font-family:inherit;
+}
+.cd-btn-email:hover { background:rgba(59,130,246,0.45); color:#fff; }
+.cd-btn-close { background:none; border:none; color:rgba(255,255,255,0.6); font-size:20px; line-height:1; cursor:pointer; padding:2px 4px; }
+.cd-btn-close:hover { color:#fff; }
+.cd-body { padding:16px 18px 20px; overflow-y:auto; max-height:calc(90vh - 100px); }
+.cd-panel { display:none; }
+.cd-panel.active { display:block; }
+.cd-back-btn {
+  display:inline-flex; align-items:center; gap:5px; background:none; border:none;
+  color:var(--text3); font-size:12px; cursor:pointer; padding:0 0 12px; font-family:inherit;
+}
+.cd-back-btn:hover { color:var(--text); }
+.tpl-grid { display:flex; flex-direction:column; gap:10px; }
+.tpl-card {
+  background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px;
+  transition:border-color 0.12s, background 0.12s;
+}
+.tpl-card:hover { background:var(--card-hover); border-color:#3b82f6; }
+.tpl-card-name { font-size:13px; font-weight:700; margin-bottom:3px; }
+.tpl-card-subj { font-size:11px; color:var(--text3); margin-bottom:8px; }
+.tpl-card-preview {
+  font-size:12px; color:var(--text2); line-height:1.5;
+  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+}
+.tpl-use-btn {
+  margin-top:10px; padding:5px 14px; background:#3b82f6; color:#fff; border:none;
+  border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:background 0.12s;
+}
+.tpl-use-btn:hover { background:#2563eb; }
+.venue-card { cursor:pointer; }
+
+/* ── Mobile Hub ──────────────────────────────────────────────────────────────── */
+.mobile-wrap { min-height:100vh; display:flex; flex-direction:column; background:var(--bg); }
+.mobile-hdr  { padding:14px 18px 10px; background:var(--bg2); border-bottom:1px solid var(--border);
+               display:flex; align-items:flex-start; justify-content:space-between; }
+.mobile-hdr-title { font-size:16px; font-weight:700; }
+.mobile-hdr-sub   { font-size:11px; color:var(--text3); margin-top:2px; }
+.mobile-body { flex:1; padding:16px; overflow-y:auto; padding-bottom:80px; }
+.mobile-greeting h2  { font-size:20px; font-weight:700; margin-bottom:3px; }
+.mobile-greeting .sub { font-size:13px; color:var(--text3); }
+.mobile-section-lbl { font-size:10px; font-weight:700; text-transform:uppercase;
+                      letter-spacing:0.8px; color:var(--text4); margin:16px 0 8px; }
+.mobile-cta-grid { display:flex; flex-direction:column; gap:12px; margin-top:16px; }
+.mobile-cta { display:flex; align-items:center; gap:14px; padding:18px 22px;
+              border-radius:14px; border:none; cursor:pointer; font-size:16px;
+              font-weight:700; color:#fff; text-decoration:none; width:100%; }
+.mobile-cta-icon  { font-size:28px; line-height:1; }
+.mobile-cta-sub   { font-size:12px; font-weight:400; opacity:.85; margin-top:2px; }
+.mobile-cta-orange { background:#ea580c; }
+.mobile-cta-blue   { background:#2563eb; }
+.mobile-cta-green  { background:#059669; }
+.mobile-links { display:flex; gap:8px; flex-wrap:wrap; }
+.mobile-link  { padding:7px 14px; border-radius:20px; background:var(--card);
+                border:1px solid var(--border); color:var(--text2); font-size:13px;
+                text-decoration:none; white-space:nowrap; }
+.mobile-link:hover { color:var(--text); background:var(--card-hover); }
+/* Mobile theme toggle */
+.m-theme-btn { background:none; border:1px solid var(--border); color:var(--text3); font-size:16px;
+               cursor:pointer; padding:4px 8px; border-radius:6px; font-family:inherit;
+               line-height:1; }
+.m-theme-btn:hover { background:var(--card-hover); color:var(--text); }
+.mobile-bnav { position:fixed; bottom:0; left:0; right:0; background:var(--bg2);
+               border-top:1px solid var(--border); display:flex; height:60px; z-index:800; }
+.mobile-bnav-btn { flex:1; display:flex; flex-direction:column; align-items:center;
+                   justify-content:center; gap:2px; font-size:10px; color:var(--text3);
+                   text-decoration:none; border:none; background:none; cursor:pointer;
+                   font-family:inherit; padding:0; }
+.mobile-bnav-btn.active { color:#ea580c; }
+.mobile-bnav-btn .mbi   { font-size:20px; line-height:1; }
+.mobile-stop-card { background:var(--card); border:1px solid var(--border);
+                    border-radius:12px; padding:14px 16px; margin-bottom:10px; }
+.mobile-stop-card.visited { opacity:.55; }
+.mobile-stop-num  { font-size:11px; color:var(--text4); margin-bottom:3px; }
+.mobile-stop-name { font-size:15px; font-weight:700; margin-bottom:4px; }
+.mobile-stop-addr { font-size:12px; color:var(--text3); margin-bottom:6px; }
+.mobile-stop-dist { font-size:11px; color:var(--text2); }
+.mobile-stop-actions { display:flex; gap:8px; margin-top:10px; }
+.mobile-stop-actions button { flex:1; padding:10px; border-radius:8px; font-size:14px;
+                               font-weight:600; cursor:pointer; border:none; }
+.mobile-stop-checkin { background:#ea580c; color:#fff; }
+.mobile-stop-skip    { background:var(--bg); border:1px solid var(--border) !important;
+                        color:var(--text2); }
+.mobile-stop-badge { display:inline-flex; align-items:center; padding:2px 8px;
+                     border-radius:6px; font-size:10px; font-weight:600; margin-top:4px; }
+.msb-pending  { background:rgba(71,85,105,.2);   color:#94a3b8; }
+.msb-visited  { background:rgba(5,150,105,.2);   color:#34d399; }
+.msb-skipped  { background:rgba(239,68,68,.2);   color:#f87171; }
+.mobile-act-item { background:var(--card); border:1px solid var(--border);
+                   border-radius:10px; padding:12px 14px; margin-bottom:8px; }
+.mobile-act-type { font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px;
+                   background:rgba(234,88,12,.15); color:#fb923c; margin-bottom:6px;
+                   display:inline-block; }
+.mobile-act-biz  { font-size:14px; font-weight:600; margin-bottom:3px; }
+.mobile-act-meta { font-size:12px; color:var(--text3); }
+/* Geo button */
+.geo-btn { display:inline-flex; align-items:center; gap:5px; margin-top:5px; padding:5px 10px;
+           background:rgba(37,99,235,.12); border:1px solid rgba(37,99,235,.3); color:#60a5fa;
+           border-radius:6px; font-size:12px; cursor:pointer; font-family:inherit; }
+.geo-btn:hover { background:rgba(37,99,235,.22); }
+/* Responsive: stack GFR 2-col fields on small screens */
+/* Hamburger menu (desktop pages on small screens) */
+.tnav-hamburger { display:none; background:none; border:none; color:var(--text); font-size:22px;
+                   cursor:pointer; padding:6px 8px; line-height:1; font-family:inherit; }
+.tnav-drawer-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:899; }
+.tnav-drawer-backdrop.open { display:block; }
+.tnav-drawer { position:fixed; top:0; right:0; bottom:0; width:280px; max-width:85vw;
+               background:var(--bg2); border-left:1px solid var(--border); z-index:900;
+               transform:translateX(100%); transition:transform .25s ease; overflow-y:auto;
+               padding:16px 0; }
+.tnav-drawer.open { transform:translateX(0); }
+.tnav-drawer-hdr { display:flex; justify-content:space-between; align-items:center;
+                    padding:0 16px 12px; border-bottom:1px solid var(--border); margin-bottom:8px; }
+.tnav-drawer-hdr .tnav-logo { margin:0; }
+.tnav-drawer-close { background:none; border:none; color:var(--text2); font-size:22px;
+                      cursor:pointer; padding:4px 8px; font-family:inherit; }
+.tnav-drawer a { display:block; padding:10px 20px; font-size:14px; color:var(--text2);
+                  text-decoration:none; }
+.tnav-drawer a:hover { background:var(--card-hover); color:var(--text); }
+.tnav-drawer a.active { color:var(--text); font-weight:600; background:var(--nav-active); }
+.tnav-drawer .tnav-sep { height:1px; background:var(--border); margin:6px 16px; }
+.tnav-drawer .tnav-grp-lbl { padding:10px 20px 4px; font-size:10px; font-weight:700;
+                              color:var(--text4); text-transform:uppercase; letter-spacing:.6px; }
+.tnav-drawer a.tnav-grp-lbl { padding:12px 20px 8px; cursor:pointer; text-decoration:none; }
+.tnav-drawer a.tnav-grp-lbl:hover { background:var(--card-hover); color:var(--text); }
+.tnav-drawer a.tnav-grp-lbl.active { color:var(--text); background:var(--nav-active); }
+.tnav-drawer .drawer-mobile-link { background:rgba(234,88,12,.08); color:#ea580c !important;
+                                    font-weight:600; margin:8px 16px; border-radius:8px;
+                                    text-align:center; padding:12px; }
+
+@media (max-width:768px) {
+  .gfr-two { grid-template-columns:1fr !important; }
+  .gfr-grid { grid-template-columns:1fr !important; }
+  .gfr-input,.gfr-select,.gfr-textarea { font-size:16px !important; }
+  .gfr-btn-cancel,.gfr-btn-submit { min-height:44px; font-size:15px !important; padding:10px 20px; }
+  .gfr-form-body { max-height:82vh; }
+  .tnav-items,.tnav-right { display:none; }
+  .tnav-hamburger { display:block; }
+  .tnav { justify-content:space-between; }
+  .tnav-logo { margin:0; }
+}
+/* ── Mobile venue bottom sheet ─────────────────────────────────────────────── */
+.m-sheet-backdrop {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,.55); z-index:850;
+}
+.m-sheet-backdrop.open { display:block; }
+.m-sheet {
+  position:fixed; bottom:0; left:0; right:0; height:82vh;
+  background:var(--bg2); border-radius:20px 20px 0 0;
+  transform:translateY(100%); transition:transform .3s ease;
+  overflow-y:auto; z-index:900; padding-bottom:80px;
+}
+.m-sheet.open { transform:translateY(0); }
+.m-sheet-handle {
+  width:40px; height:4px; background:var(--border);
+  border-radius:2px; margin:10px auto 2px; cursor:pointer;
+}
+.m-sheet-sec { padding:12px 16px; border-bottom:1px solid var(--border); }
+.m-sheet-lbl {
+  font-size:10px; font-weight:700; color:var(--text4);
+  text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;
+}
+/* Map page — map fills viewport above bottom nav */
+.mobile-wrap.map-mode { background:transparent; min-height:0; }
+.m-map-wrap { position:fixed; top:0; left:0; right:0; bottom:60px; z-index:100; height:calc(100vh - 60px); width:100%; }
+.m-map-filters {
+  position:fixed; top:10px; left:10px; right:10px;
+  z-index:110; display:flex; gap:6px; flex-wrap:wrap;
+}
+.m-map-filter-btn {
+  padding:6px 14px; border-radius:20px; font-size:12px; font-weight:600;
+  border:none; cursor:pointer; background:var(--bg2); color:var(--text1);
+  box-shadow:0 1px 4px rgba(0,0,0,.4);
+}
+.m-map-filter-btn.on { background:#ea580c; color:#fff; }
+/* Mobile sheet tabs */
+.m-tabs { display:flex; border-bottom:1px solid var(--border); background:var(--bg2); position:sticky; top:0; z-index:5; }
+.m-tab { flex:1; padding:11px 4px; font-size:12px; font-weight:600; color:var(--text3); text-align:center; cursor:pointer; border-bottom:2px solid transparent; }
+.m-tab.active { color:#ea580c; border-bottom-color:#ea580c; }
+.m-panel { display:none; }
+.m-panel.active { display:block; }
+
+</style><script>(function(){{var t=localStorage.getItem("hub-theme");if(t==="light"){{document.documentElement.setAttribute("data-theme","light");var ic=document.getElementById("theme-icon");if(ic)ic.textContent="☀️";}}}})()</script><script src="_data.js"></script><style>.compose-fab,.compose-overlay{display:none!important}.tnav-signout,.drawer-mobile-link{display:none!important}a[href="#"]{opacity:.4;cursor:not-allowed}.snap-banner{background:#ea580c;color:#fff;padding:6px 14px;font-size:11px;font-weight:600;text-align:center;letter-spacing:.4px;text-transform:uppercase;position:sticky;top:48px;z-index:700}</style></head><body><div class="snap-banner">Offline snapshot · April 15, 2026 at 12:00 PM · Read-only</div><nav class="tnav"><button class="tnav-hamburger" onclick="openDrawer()">☰</button><a href="index.html" class="tnav-logo">✦ Reform <span>Operations Hub</span></a><div class="tnav-items"><a href="index.html" class="tnav-btn">Dashboard</a><div class="tnav-menu"><button class="tnav-btn">Outreach ▾</button><div class="tnav-drop"><div class="tnav-grp-lbl">Routes</div><a href="#" class="">Route Planner</a><a href="#" class="">Outreach Venues</a><a href="#" class="">Field Routes</a><div class="tnav-sep"></div><a href="community.html" class="tnav-grp-lbl">Community</a><a href="community_directory.html" class="">Contact List</a><div class="tnav-sep"></div><a href="guerilla.html" class="tnav-grp-lbl">Guerilla Mktg</a><a href="#" class="">Internal Events</a><a href="guerilla_directory.html" class="">Contact List</a><a href="#" class="">Lead Capture</a><div class="tnav-sep"></div><a href="attorney.html" class="tnav-grp-lbl">PI Attorney</a><a href="attorney_directory.html" class="">Contact List</a></div></div><div class="tnav-menu"><button class="tnav-btn active">PI Cases ▾</button><div class="tnav-drop"><a href="patients.html" class="">All Patients</a><a href="patients_active.html" class="">Active Treatment</a><a href="patients_billed.html" class=" active">Billed</a><a href="patients_awaiting.html" class="">Awaiting</a><a href="patients_closed.html" class="">Closed</a><div class="tnav-sep"></div><a href="firms.html" class="">Law Firm ROI</a></div></div><div class="tnav-menu"><button class="tnav-btn">Billing ▾</button><div class="tnav-drop"><a href="billing_collections.html" class="">Collections</a><a href="billing_settlements.html" class="">Settlements</a></div></div><div class="tnav-menu"><button class="tnav-btn">Comms ▾</button><div class="tnav-drop"><a href="#" class="">Email</a><a href="#" class="">Contacts</a></div></div><div class="tnav-menu"><button class="tnav-btn">Social ▾</button><div class="tnav-drop"><a href="#" class="">Poster Hub</a><a href="#" class="">Schedule</a><a href="#" class="">History</a></div></div><a href="#" class="tnav-btn">Calendar</a></div><div class="tnav-right"><button class="tnav-theme-btn" id="theme-btn" onclick="toggleTheme()"><span id="theme-icon">🌙</span></button><span class="tnav-user">Snapshot</span><a href="#" class="tnav-btn" style="font-size:12px" title="Mobile View">📱</a><a href="#" class="tnav-signout">Sign Out</a></div></nav><div class="tnav-drawer-backdrop" id="drawer-backdrop" onclick="closeDrawer()"></div><div class="tnav-drawer" id="drawer-nav"><div class="tnav-drawer-hdr"><span class="tnav-logo">✦ Reform</span><button class="tnav-drawer-close" onclick="closeDrawer()">✕</button></div><a href="index.html" class="">Dashboard</a><div class="tnav-sep"></div><div class="tnav-grp-lbl">Routes</div><a href="#">Route Planner</a><a href="#">Outreach Venues</a><a href="#">Field Routes</a><div class="tnav-sep"></div><a href="community.html" class="tnav-grp-lbl">Community</a><a href="community_directory.html">Contact List</a><div class="tnav-sep"></div><a href="guerilla.html" class="tnav-grp-lbl">Guerilla Mktg</a><a href="guerilla_directory.html">Contact List</a><a href="#">Lead Capture</a><div class="tnav-sep"></div><a href="attorney.html" class="tnav-grp-lbl">PI Attorney</a><a href="attorney_directory.html">Contact List</a><div class="tnav-sep"></div><div class="tnav-grp-lbl">PI Cases</div><a href="patients.html">All Patients</a><a href="firms.html">Law Firm ROI</a><div class="tnav-sep"></div><a href="billing_collections.html">Collections</a><a href="billing_settlements.html">Settlements</a><a href="#">Email</a><a href="#">Contacts</a><a href="#">Social Poster</a><a href="#">Calendar</a><div class="tnav-sep"></div><a href="#" class="drawer-mobile-link">📱 Mobile View</a><a href="#" style="color:var(--text3)">Sign Out</a></div><div class="main"><div class="header"><div class="header-left"><h1>Billed Cases</h1><div class="sub">Cases billed and pending resolution</div></div></div><div class="content">
+<div class="stats-row">
+  <div class="stat-chip c-purple"><div class="label">Active Treatment</div><div class="value" id="s-active">—</div></div>
+  <div class="stat-chip c-yellow"><div class="label">Billed</div>          <div class="value" id="s-billed">—</div></div>
+  <div class="stat-chip c-blue">  <div class="label">Awaiting</div>        <div class="value" id="s-awaiting">—</div></div>
+  <div class="stat-chip c-green"> <div class="label">Closed</div>          <div class="value" id="s-closed">—</div></div>
+</div>
+<div class="panel" style="margin-bottom:0">
+  <div class="filter-bar">
+    <input class="search-input" id="search-box" placeholder="Search patient…" oninput="applyFilters()">
+  </div>
+  <div id="count-bar" style="padding:8px 18px;font-size:12px;color:var(--text3)">Loading…</div>
+  <div class="rolodex-grid" id="rolodex-grid"><div class="loading">Loading…</div></div>
+</div>
+<div class="cd-overlay" id="pd-overlay" onclick="if(event.target===this)closePatientDetail()">
+  <div class="cd-modal">
+    <div class="cd-header">
+      <div style="flex:1;min-width:0">
+        <div class="cd-title" id="pd-title"></div>
+        <div id="pd-subtitle" style="margin-top:4px"></div>
+      </div>
+      <div class="cd-header-actions">
+        <button class="cd-btn-close" onclick="closePatientDetail()">&times;</button>
+      </div>
+    </div>
+    <div class="cd-body" id="pd-body"></div>
+  </div>
+</div>
+</div></div><div class="compose-overlay" id="compose-overlay" onclick="if(event.target===this)closeCompose()"><div class="compose-box"><div class="compose-header"><h3 id="compose-title">New Email</h3><button class="compose-close" onclick="closeCompose()">✕</button></div><div class="compose-fields"><div class="compose-field-row"><span class="compose-field-label">To</span><div style="position:relative;flex:1"><input type="text" id="compose-to" placeholder="Name or email" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true"><div id="compose-ac-list" class="compose-ac-list"></div></div><span class="compose-ccbcc-toggle" id="ccbcc-toggle" onclick="toggleCcBcc()">Cc/Bcc</span></div><div class="compose-ccbcc" id="ccbcc-fields"><div class="compose-field-row"><span class="compose-field-label">Cc</span><input type="text" id="compose-cc" placeholder="Email addresses"></div><div class="compose-field-row"><span class="compose-field-label">Bcc</span><input type="text" id="compose-bcc" placeholder="Email addresses"></div></div><div class="compose-field-row" style="border-bottom:none"><span class="compose-field-label">Subj</span><input type="text" id="compose-subject" placeholder="Subject"></div></div><div class="compose-body-wrap"><textarea id="compose-body" placeholder="Write your message…"></textarea></div><div class="compose-sig" id="compose-sig">Best regards,<br><strong>Reform Chiropractic</strong><br>(832) 699-3148 · reformchiropractic.com</div><div class="compose-toolbar"><select class="compose-template-sel" id="compose-template" onchange="_applyTemplate()"><option value="">Templates…</option><option value="intro_attorney">Attorney Intro</option><option value="followup">General Follow-Up</option><option value="referral_thanks">Referral Thank You</option><option value="event_invite">Event Invitation</option></select><div class="spacer"></div><div class="compose-actions"><div class="compose-status" id="compose-status"></div><button class="btn-cancel" onclick="closeCompose()">Cancel</button><button class="btn-send" id="btn-send" onclick="sendEmail()">Send →</button></div></div></div></div><script>function toggleTheme(){var d=document.documentElement;var cur=d.getAttribute("data-theme");var t=cur==="light"?"dark":"light";d.setAttribute("data-theme",t==="dark"?"":"light");var ic=document.getElementById("theme-icon");if(ic)ic.textContent=t==="light"?"☀️":"🌙";localStorage.setItem("hub-theme",t);}function openDrawer(){document.getElementById("drawer-nav").classList.add("open");document.getElementById("drawer-backdrop").classList.add("open");}function closeDrawer(){document.getElementById("drawer-nav").classList.remove("open");document.getElementById("drawer-backdrop").classList.remove("open");}</script><script>var IS_ADMIN = true;
+
+const BR = '';
+const BT = '';
+
+async function fetchAll(tid, _attempt) {
+  if (window.__OFFLINE_FETCH) return window.__OFFLINE_FETCH(tid);
+  var attempt = _attempt || 0;
+  try {
+    const r = await fetch('/api/data/' + tid);
+    if (!r.ok) {
+      if (attempt < 2) {
+        await new Promise(ok => setTimeout(ok, 1000 * (attempt + 1)));
+        return fetchAll(tid, attempt + 1);
+      }
+      return [];
+    }
+    return await r.json();
+  } catch(e) {
+    if (attempt < 2) {
+      await new Promise(ok => setTimeout(ok, 1000 * (attempt + 1)));
+      return fetchAll(tid, attempt + 1);
+    }
+    return [];
+  }
+}
+
+function sv(f) {
+  if (!f) return '';
+  if (typeof f === 'object' && f.value !== undefined) return f.value;
+  return String(f);
+}
+
+function daysUntil(ds) {
+  if (!ds) return null;
+  return Math.round(
+    (new Date(ds + 'T00:00:00').setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000
+  );
+}
+
+function fmt(ds) {
+  if (!ds) return '';
+  return new Date(ds + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+let _lastRefresh = '';
+function stampRefresh() {
+  _lastRefresh = new Date().toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'});
+  const el = document.getElementById('refresh-stamp');
+  if (el) el.textContent = 'Updated ' + _lastRefresh;
+}
+
+
+/* ── Autocomplete ──────────────────────────────────────────────── */
+var _acCache=null, _acIdx=-1;
+async function _acLoad(){
+  if(_acCache) return _acCache;
+  try{var r=await fetch('/api/contacts/autocomplete');if(r.ok)_acCache=await r.json();else _acCache=[];}
+  catch(e){_acCache=[];}
+  return _acCache;
+}
+function _acFilter(q){
+  if(!_acCache||!q) return [];
+  var lq=q.toLowerCase();
+  return _acCache.filter(function(c){return c.n.toLowerCase().includes(lq)||(c.e&&c.e.toLowerCase().includes(lq));}).slice(0,8);
+}
+function _acRender(items){
+  var el=document.getElementById('compose-ac-list'); _acIdx=-1;
+  if(!items.length){el.classList.remove('open');return;}
+  el.innerHTML=items.map(function(c,i){
+    return '<div class="compose-ac-item" data-idx="'+i+'" onmousedown="_acPick('+i+')">'+
+      '<span class="compose-ac-name">'+esc(c.n)+'</span>'+(c.e?'<span class="compose-ac-email">'+esc(c.e)+'</span>':'')+'</div>';
+  }).join('');
+  el.classList.add('open');
+}
+function _acPick(i){
+  var items=_acFilter(document.getElementById('compose-to').value.trim());
+  if(items[i]){document.getElementById('compose-to').value=items[i].e||items[i].n;document.getElementById('compose-ac-list').classList.remove('open');document.getElementById('compose-subject').focus();}
+}
+function _acKeydown(e){
+  var el=document.getElementById('compose-ac-list');if(!el.classList.contains('open'))return;
+  var items=el.querySelectorAll('.compose-ac-item');
+  if(e.key==='ArrowDown'){e.preventDefault();_acIdx=Math.min(_acIdx+1,items.length-1);items.forEach(function(x,j){x.classList.toggle('sel',j===_acIdx);});}
+  else if(e.key==='ArrowUp'){e.preventDefault();_acIdx=Math.max(_acIdx-1,0);items.forEach(function(x,j){x.classList.toggle('sel',j===_acIdx);});}
+  else if(e.key==='Enter'&&_acIdx>=0){e.preventDefault();_acPick(_acIdx);}
+  else if(e.key==='Escape'){el.classList.remove('open');}
+}
+(function(){
+  var inp=document.getElementById('compose-to'); if(!inp) return;
+  inp.addEventListener('input',function(){var q=inp.value.trim();if(q.length<1){document.getElementById('compose-ac-list').classList.remove('open');return;}_acLoad().then(function(){_acRender(_acFilter(q));});});
+  inp.addEventListener('keydown',_acKeydown);
+  inp.addEventListener('blur',function(){setTimeout(function(){document.getElementById('compose-ac-list').classList.remove('open');},150);});
+})();
+
+/* ── CC/BCC toggle ─────────────────────────────────────────────── */
+function toggleCcBcc(){
+  var el=document.getElementById('ccbcc-fields');
+  el.classList.toggle('open');
+  document.getElementById('ccbcc-toggle').textContent=el.classList.contains('open')?'Hide':'Cc/Bcc';
+  if(el.classList.contains('open'))document.getElementById('compose-cc').focus();
+}
+
+/* ── Templates ─────────────────────────────────────────────────── */
+var _TEMPLATES = {
+  intro_attorney: {
+    subject: 'Introduction: Reform Chiropractic — PI Case Collaboration',
+    body: 'Good afternoon,\n\nMy name is Daniel Cisneros and I\'m reaching out from Reform Chiropractic. We specialize in treating personal injury patients and would love to discuss how we can support your firm\'s clients with their treatment needs.\n\nWe provide thorough documentation, timely reporting, and ensure your clients receive the highest quality care throughout their recovery.\n\nWould you be available for a brief call this week to discuss a potential partnership?'
+  },
+  followup: {
+    subject: 'Following Up — Reform Chiropractic',
+    body: 'Hi,\n\nI wanted to follow up on our recent conversation. Please let me know if you have any questions or if there\'s anything we can help with.\n\nLooking forward to hearing from you.'
+  },
+  referral_thanks: {
+    subject: 'Thank You for the Referral!',
+    body: 'Hi,\n\nI wanted to personally thank you for the recent referral. We truly appreciate your trust in Reform Chiropractic.\n\nWe\'ll make sure your client receives excellent care. Please don\'t hesitate to reach out if you need any updates on their progress.'
+  },
+  event_invite: {
+    subject: 'You\'re Invited — Reform Chiropractic Event',
+    body: 'Hi,\n\nWe\'d love to invite you to an upcoming event hosted by Reform Chiropractic.\n\nPlease let us know if you\'re interested and we\'ll share all the details.\n\nHope to see you there!'
+  }
+};
+function _applyTemplate(){
+  var sel=document.getElementById('compose-template');
+  var t=_TEMPLATES[sel.value];
+  if(!t){return;}
+  document.getElementById('compose-subject').value=t.subject;
+  document.getElementById('compose-body').value=t.body;
+  sel.value='';
+  document.getElementById('compose-body').focus();
+}
+
+/* ── Signature ─────────────────────────────────────────────────── */
+var _SIG = '\n\n--\nBest regards,\nReform Chiropractic\n(832) 699-3148 \u00b7 reformchiropractic.com';
+
+/* ── Open / Close ──────────────────────────────────────────────── */
+var _composeThreadId='';
+function openCompose(to,subject,threadId){
+  _composeThreadId=threadId||'';
+  document.getElementById('compose-to').value=to||'';
+  document.getElementById('compose-subject').value=subject||'';
+  document.getElementById('compose-body').value='';
+  document.getElementById('compose-cc').value='';
+  document.getElementById('compose-bcc').value='';
+  document.getElementById('compose-template').value='';
+  document.getElementById('compose-status').innerHTML='';
+  document.getElementById('compose-ac-list').classList.remove('open');
+  document.getElementById('ccbcc-fields').classList.remove('open');
+  document.getElementById('ccbcc-toggle').textContent='Cc/Bcc';
+  document.getElementById('compose-title').textContent=threadId?'Reply':'New Email';
+  document.getElementById('btn-send').textContent=threadId?'Reply \u2192':'Send \u2192';
+  document.getElementById('compose-overlay').classList.add('open');
+  if(!to)_acLoad();
+  setTimeout(function(){document.getElementById(to?'compose-body':'compose-to').focus();},50);
+}
+function closeCompose(){
+  _cancelUndo();
+  document.getElementById('compose-overlay').classList.remove('open');
+  document.getElementById('compose-ac-list').classList.remove('open');
+}
+
+/* ── Send with Undo ────────────────────────────────────────────── */
+var _undoTimer=null, _undoAbort=false;
+function _cancelUndo(){if(_undoTimer){clearTimeout(_undoTimer);_undoTimer=null;_undoAbort=true;}}
+async function sendEmail(){
+  var to=document.getElementById('compose-to').value.trim();
+  var subj=document.getElementById('compose-subject').value.trim();
+  var bodyText=document.getElementById('compose-body').value.trim();
+  var cc=document.getElementById('compose-cc').value.trim();
+  var bcc=document.getElementById('compose-bcc').value.trim();
+  var st=document.getElementById('compose-status');
+  if(!to||!subj||!bodyText){st.innerHTML='<span style="color:#ef4444">Please fill in all fields.</span>';return;}
+  var fullBody=bodyText+_SIG;
+  /* Undo countdown */
+  _undoAbort=false;
+  var btn=document.getElementById('btn-send');
+  btn.disabled=true; btn.style.opacity='0.5';
+  var secs=5;
+  st.innerHTML='<span style="color:#3b82f6">Sending in '+secs+'s</span> <button class="compose-undo" onclick="_doUndo()">Undo</button>';
+  _undoTimer=setInterval(function(){
+    secs--;
+    if(secs<=0){clearInterval(_undoTimer);_undoTimer=null;_doActualSend(to,cc,bcc,subj,fullBody);}
+    else{var sp=st.querySelector('span');if(sp)sp.textContent='Sending in '+secs+'s';}
+  },1000);
+}
+function _doUndo(){
+  _cancelUndo();
+  var st=document.getElementById('compose-status');
+  st.innerHTML='<span style="color:#64748b">Send cancelled.</span>';
+  var btn=document.getElementById('btn-send');
+  btn.disabled=false; btn.style.opacity='1';
+}
+async function _doActualSend(to,cc,bcc,subj,body){
+  var st=document.getElementById('compose-status');
+  var btn=document.getElementById('btn-send');
+  if(_undoAbort){btn.disabled=false;btn.style.opacity='1';return;}
+  st.innerHTML='<span style="color:#94a3b8">Sending\u2026</span>';
+  try{
+    var payload={to:to,subject:subj,body:body};
+    if(cc)payload.cc=cc;
+    if(bcc)payload.bcc=bcc;
+    if(_composeThreadId)payload.threadId=_composeThreadId;
+    var r=await fetch('/api/gmail/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    var d=await r.json();
+    if(r.ok){st.innerHTML='<span style="color:#059669">\u2713 Sent!</span>';setTimeout(closeCompose,1200);}
+    else{st.innerHTML='<span style="color:#ef4444">Error: '+(d.error||r.status)+'</span>';}
+  }catch(e){st.innerHTML='<span style="color:#ef4444">Network error.</span>';}
+  btn.disabled=false; btn.style.opacity='1';
+}
+
+
+let _patients = [];
+let _stageFilter = 'billed';
+
+const STAGE_LABEL = {
+  active:   'Active Treatment',
+  billed:   'Billed',
+  awaiting: 'Awaiting / Negotiating',
+  closed:   'Closed',
+};
+const STAGE_CLS = {
+  active: 'stage-active', billed: 'stage-billed',
+  awaiting: 'stage-awaiting', closed: 'stage-closed',
+};
+
+function applyFilters() {
+  const q = (document.getElementById('search-box').value || '').toLowerCase();
+  const filtered = _patients.filter(p => {
+    const stageOk  = !_stageFilter || p._stage === _stageFilter;
+    const searchOk = !q || (p._name || '').toLowerCase().includes(q);
+    return stageOk && searchOk;
+  });
+  document.getElementById('count-bar').textContent = filtered.length + ' patients shown';
+  document.getElementById('rolodex-grid').innerHTML = filtered.length ? filtered.map(p => {
+    const firm   = esc(sv(p['Law Firm Name ONLY'] || p['Law Firm Name'] || p['Law Firm'] || ''));
+    const visits = p['# of Visits'] || '';
+    const fu     = p['Follow-Up Date'] || p['Follow Up Date'];
+    const fuDays = daysUntil(fu);
+    const fuColor = fuDays !== null && fuDays < 0 ? '#ef4444' : fuDays === 0 ? '#f59e0b' : 'var(--text3)';
+    const doi    = p._doi || '';
+    return `<div class="patient-card" onclick="openPatientDetail(_patients.find(x=>x.id===${p.id}))">
+      <div class="pc-head">
+        <div class="pc-name">${esc(p._name)}</div>
+        <span class="pc-stage ${STAGE_CLS[p._stage]}">${STAGE_LABEL[p._stage]}</span>
+      </div>
+      ${firm   ? `<div class="pc-row"><span class="pc-lbl">Law Firm</span><span class="pc-val">${firm}</span></div>` : ''}
+      ${visits ? `<div class="pc-row"><span class="pc-lbl">Visits</span><span class="pc-val">${visits}</span></div>` : ''}
+      ${doi    ? `<div class="pc-row"><span class="pc-lbl">DOI</span><span class="pc-val">${doi}</span></div>` : ''}
+      ${fu     ? `<div class="pc-row"><span class="pc-lbl">Follow-Up</span><span class="pc-val" style="color:${fuColor}">${fmt(fu)}</span></div>` : ''}
+    </div>`;
+  }).join('') : '<div class="empty">No patients match this filter</div>';
+}
+
+let _allFirmNames = [];
+
+async function load() {
+  const [activeRows, billedRows, awaitingRows, closedRows, attRows] = await Promise.all([
+    fetchAll(775), fetchAll(773),
+    fetchAll(776), fetchAll(772),
+    fetchAll(768),
+  ]);
+
+  document.getElementById('s-active').textContent   = activeRows.length;
+  document.getElementById('s-billed').textContent   = billedRows.length;
+  document.getElementById('s-awaiting').textContent = awaitingRows.length;
+  document.getElementById('s-closed').textContent   = closedRows.length;
+
+  _allFirmNames = Array.from(new Set(
+    attRows.map(f => (f['Law Firm Name'] || '').trim()).filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b));
+
+  function tag(rows, stage) {
+    return rows.map(r => {
+      const label = r['Case Label'] || '';
+      const m = label.match(/^(.+?)\s*-\s*(\d{1,2}\/\d{1,2}\/\d{4})$/);
+      const nameFromPatient = Array.isArray(r['Patient']) && r['Patient'][0] ? r['Patient'][0].value : '';
+      return {
+        ...r,
+        _stage: stage,
+        _name:  m ? m[1].trim() : (nameFromPatient || label || '(unnamed)'),
+        _doi:   m ? m[2] : '',
+      };
+    });
+  }
+  _patients = [
+    ...tag(activeRows,   'active'),
+    ...tag(billedRows,   'billed'),
+    ...tag(awaitingRows, 'awaiting'),
+    ...tag(closedRows,   'closed'),
+  ].sort((a, b) => a._name.localeCompare(b._name));
+
+  applyFilters();
+  stampRefresh();
+}
+
+function _getFirmDisplay(p) {
+  const raw = p['Law Firm Name ONLY'] || p['Law Firm Name'] || p['Law Firm'] || '';
+  if (!raw) return '';
+  if (Array.isArray(raw)) return raw.length ? (raw[0].value || String(raw[0])) : '';
+  if (typeof raw === 'object' && raw.value !== undefined) return raw.value;
+  return String(raw);
+}
+
+function _getLinkedValue(v) {
+  if (!v) return '';
+  if (Array.isArray(v)) return v.length ? (v[0].value || String(v[0])) : '';
+  if (typeof v === 'object' && v.value !== undefined) return v.value;
+  return String(v);
+}
+
+function _parseFirmHistory(p) {
+  // New structured field first, then fall back to legacy Case Notes parsing
+  let source = (p['Firm History'] || '').trim();
+  if (!source) {
+    const caseNotes = p['Case Notes'] || '';
+    const hMatch = caseNotes.match(/Firm history:\s*(.+)/);
+    if (hMatch) source = hMatch[1];
+  }
+  if (!source) return [];
+  return source.split('->').map(raw => {
+    const s = raw.trim();
+    if (!s) return null;
+    const m = s.match(/^(.+?)\s*\((until|current)\s*([^)]*)\)\s*$/);
+    if (m) {
+      return { name: m[1].trim(), isCurrent: m[2] === 'current', untilDate: m[2] === 'until' ? m[3].trim() : '' };
+    }
+    return { name: s, isCurrent: false, untilDate: '' };
+  }).filter(Boolean);
+}
+
+function _buildPatientDetailHTML(p) {
+  const stageCls = STAGE_CLS[p._stage] || '';
+  const doi    = p._doi || '';
+  const firm   = _getFirmDisplay(p);
+  const visits = p['# of Visits'] || '';
+  const fu     = p['Follow-Up Date'] || p['Follow Up Date'] || '';
+  const phone  = p['Phone'] || p['Cell Phone'] || '';
+  const dob    = p['DOB'] || p['Date of Birth'] || '';
+  const addr   = p['Address'] || '';
+  const atty   = _getLinkedValue(p['Attorney'] || p['Referring Attorney'] || '');
+  const ins    = p['Insurance'] || p['Insurance Company'] || '';
+  const adj    = p['Adjuster'] || p['Claims Adjuster'] || '';
+  const notes  = p['Notes'] || '';
+  const caseNotes = p['Case Notes'] || '';
+
+  const firmHistory = _parseFirmHistory(p);
+  // If history doesn't end with current firm (e.g. field empty but Law Firm Name
+  // has a value), make sure the display still shows the current firm as a node.
+  let timelineEntries = firmHistory.slice();
+  if (firm && (timelineEntries.length === 0 || !timelineEntries[timelineEntries.length - 1].isCurrent || timelineEntries[timelineEntries.length - 1].name !== firm)) {
+    // Only show a timeline if there's actual history
+  }
+
+  // Editable Law Firm row (button triggers inline editor)
+  const firmRowHTML =
+    '<div class="pc-row" style="margin:0" id="pd-firm-row">'
+    + '<span class="pc-lbl">Law Firm</span>'
+    + '<span class="pc-val" style="display:flex;align-items:center;gap:8px">'
+    +   '<span id="pd-firm-display">' + esc(firm || '(none)') + '</span>'
+    +   '<button onclick="openFirmEditor(' + p.id + ',\'' + p._stage + '\')" '
+    +     'style="background:none;border:1px solid var(--border);color:var(--text3);'
+    +     'font-size:10px;padding:2px 8px;border-radius:4px;cursor:pointer">Edit</button>'
+    + '</span></div>';
+
+  const rows = [
+    ['DOI',        doi],
+    ['Visits',     visits],
+    ['Attorney',   atty],
+    ['Phone',      phone],
+    ['DOB',        dob],
+    ['Insurance',  ins],
+    ['Adjuster',   adj],
+    ['Address',    addr],
+  ].filter(([_, v]) => v);
+
+  let html = '<div style="display:grid;gap:7px;margin-bottom:14px">';
+  html += firmRowHTML;
+  rows.forEach(([lbl, val]) => {
+    html += '<div class="pc-row" style="margin:0"><span class="pc-lbl">' + esc(lbl) + '</span>'
+          + '<span class="pc-val">' + esc(String(val)) + '</span></div>';
+  });
+  html += '</div>';
+
+  // Firm history timeline
+  if (firmHistory.length > 1) {
+    html += '<div id="pd-firm-history-box" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:8px">Firm History</div>';
+    firmHistory.forEach((entry, i) => {
+      const isCurrent = entry.isCurrent || (i === firmHistory.length - 1);
+      const dotColor = isCurrent ? '#059669' : '#94a3b8';
+      html += '<div style="display:flex;gap:10px;padding-bottom:' + (i === firmHistory.length - 1 ? '0' : '8') + 'px">';
+      html += '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">';
+      html += '<div style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';margin-top:3px"></div>';
+      if (i < firmHistory.length - 1) html += '<div style="flex:1;width:2px;background:var(--border);margin-top:2px"></div>';
+      html += '</div>';
+      let label = esc(entry.name);
+      if (isCurrent) {
+        label += ' <span style="font-size:10px;color:#059669">(current)</span>';
+      } else if (entry.untilDate) {
+        label += ' <span style="font-size:10px;color:var(--text3)">(until ' + esc(entry.untilDate) + ')</span>';
+      } else {
+        label += ' <span style="font-size:10px;color:var(--text3)">(previous)</span>';
+      }
+      html += '<div style="font-size:12px;color:' + (isCurrent ? 'var(--text)' : 'var(--text3)') + ';'
+            + (isCurrent ? 'font-weight:600' : '') + '">' + label + '</div></div>';
+    });
+    html += '</div>';
+  }
+
+  if (fu) {
+    const fuDays = daysUntil(fu);
+    const fuColor = fuDays !== null && fuDays < 0 ? '#ef4444' : fuDays === 0 ? '#f59e0b' : '#34d399';
+    const fuLabel = fuDays === null ? '' : fuDays < 0
+      ? Math.abs(fuDays) + 'd overdue'
+      : fuDays === 0 ? 'Today' : 'in ' + fuDays + 'd';
+    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Follow-Up</div>';
+    html += '<div style="font-size:14px;font-weight:600;color:' + fuColor + '">' + esc(fmt(fu));
+    if (fuLabel) html += ' <span style="font-size:11px;font-weight:400;color:' + fuColor + '">(' + fuLabel + ')</span>';
+    html += '</div></div>';
+  }
+
+  // Case Notes (strip firm history line since it's shown above)
+  const cleanCaseNotes = (caseNotes || '').split('\n').filter(l => !l.startsWith('Firm history:')).join('\n').trim();
+  const allNotes = [notes, cleanCaseNotes].filter(Boolean).join('\n\n').trim();
+  if (allNotes) {
+    html += '<hr style="border:none;border-top:1px solid var(--border);margin:10px 0">';
+    html += '<div style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Notes</div>';
+    html += '<div style="font-size:12px;color:var(--text2);line-height:1.6;white-space:pre-wrap">' + esc(allNotes) + '</div>';
+  }
+
+  return html;
+}
+
+function openFirmEditor(patientId, stage) {
+  const p = _patients.find(x => x.id === patientId);
+  if (!p) return;
+  const row = document.getElementById('pd-firm-row');
+  if (!row) return;
+  const current = _getFirmDisplay(p);
+  const listId = 'firm-options-' + patientId;
+  row.innerHTML =
+    '<span class="pc-lbl">Law Firm</span>'
+    + '<span class="pc-val" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+    +   '<input id="pd-firm-input" list="' + listId + '" value="' + esc(current) + '" '
+    +     'style="flex:1;min-width:180px;background:var(--bg);border:1px solid var(--border);'
+    +     'color:var(--text);padding:4px 8px;border-radius:4px;font-size:13px">'
+    +   '<datalist id="' + listId + '">'
+    +     _allFirmNames.map(n => '<option value="' + esc(n) + '"></option>').join('')
+    +   '</datalist>'
+    +   '<button onclick="saveFirmEdit(' + patientId + ',\'' + stage + '\')" '
+    +     'style="background:#059669;border:none;color:#fff;font-size:11px;'
+    +     'padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:600">Save</button>'
+    +   '<button onclick="cancelFirmEdit(' + patientId + ')" '
+    +     'style="background:none;border:1px solid var(--border);color:var(--text3);'
+    +     'font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer">Cancel</button>'
+    + '</span>';
+  setTimeout(() => {
+    const inp = document.getElementById('pd-firm-input');
+    if (inp) { inp.focus(); inp.select(); }
+  }, 10);
+}
+
+function cancelFirmEdit(patientId) {
+  const p = _patients.find(x => x.id === patientId);
+  if (!p) return;
+  // Re-render just the detail body
+  document.getElementById('pd-body').innerHTML = _buildPatientDetailHTML(p);
+}
+
+async function saveFirmEdit(patientId, stage) {
+  const input = document.getElementById('pd-firm-input');
+  if (!input) return;
+  const newFirm = input.value.trim();
+  if (!newFirm) { alert('Firm name required'); return; }
+
+  const p = _patients.find(x => x.id === patientId);
+  if (!p) return;
+  const currentFirm = (_getFirmDisplay(p) || '').trim();
+  if (newFirm === currentFirm) { cancelFirmEdit(patientId); return; }
+
+  // Disable inputs, show saving state
+  const saveBtn = input.parentElement.querySelector('button');
+  if (saveBtn) { saveBtn.textContent = 'Saving…'; saveBtn.disabled = true; }
+  input.disabled = true;
+
+  try {
+    const resp = await fetch('/api/patients/' + stage + '/' + patientId + '/firm', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_firm: newFirm }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      alert('Save failed: ' + (err.error || resp.status));
+      if (saveBtn) { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }
+      input.disabled = false;
+      return;
+    }
+    const data = await resp.json();
+    // Update local patient record in place
+    p['Law Firm Name'] = data['Law Firm Name'];
+    p['Firm History']  = data['Firm History'];
+    // Clear the old "Law Firm Name ONLY" formula cache since it won't update locally
+    delete p['Law Firm Name ONLY'];
+    // Re-render the whole modal body
+    document.getElementById('pd-body').innerHTML = _buildPatientDetailHTML(p);
+    applyFilters();
+  } catch (e) {
+    alert('Save failed: ' + e.message);
+    if (saveBtn) { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }
+    input.disabled = false;
+  }
+}
+
+function openPatientDetail(p) {
+  if (!p) return;
+  document.getElementById('pd-title').textContent = p._name || '(unnamed)';
+  const stageCls = STAGE_CLS[p._stage] || '';
+  const stageLabel = STAGE_LABEL[p._stage] || '';
+  document.getElementById('pd-subtitle').innerHTML = '<span class="pc-stage ' + stageCls + '">' + esc(stageLabel) + '</span>';
+  document.getElementById('pd-body').innerHTML = _buildPatientDetailHTML(p);
+  document.getElementById('pd-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closePatientDetail() {
+  document.getElementById('pd-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+load();
+</script></body></html>

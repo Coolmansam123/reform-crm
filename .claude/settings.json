@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -Command \"$file = Join-Path $env:CLAUDE_PROJECT_DIR 'directives/CLAUDE.md'; if (Test-Path $file) { Get-Content $file } else { Write-Output 'Note: CLAUDE.md not found in directives/' }\""
+          }
+        ]
+      }
+    ]
+  }
+}

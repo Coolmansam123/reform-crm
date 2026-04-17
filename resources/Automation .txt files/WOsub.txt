@@ -1,0 +1,119 @@
+{
+  "timeline": {
+    "fonts": [
+      {
+        "src": "https://fonts.gstatic.com/s/bebasneue/v16/JTUSjIg69CK48gW7PXoo9Wlhzg.ttf"
+      },
+      {
+        "src": "https://fonts.gstatic.com/s/bebasneue/v16/JTUSjIg69CK48gW7PXoo9Wlhzg.ttf"
+      }
+    ],
+    "background": "#FFFFFF",
+    "tracks": [
+      {
+        "clips": [
+          {
+            "length": 4,
+            "asset": {
+              "type": "video",
+              "src": "https://shotstack-ingest-api-stage-sources.s3.ap-southeast-2.amazonaws.com/hau4kh2spy/zzz01kbz-vqzbg-nyedf-wfqyp-4q4qph/source.mp4",
+              "volume": 1
+            },
+            "start": 999,
+            "transition": {
+              "in": "fade"
+            }
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "asset": {
+              "type": "text",
+              "text": "phCategory",
+              "alignment": {
+                "horizontal": "left",
+                "vertical": "center"
+              },
+              "font": {
+                "color": "#000000",
+                "family": "Bebas Neue",
+                "size": "85",
+                "lineHeight": 1
+              },
+              "width": 960,
+              "height": 107
+            },
+            "start": 0,
+            "length": 3,
+            "offset": {
+              "x": 0,
+              "y": 0.036
+            },
+            "position": "center",
+            "transition": {
+              "out": "fadeFast"
+            }
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "length": 3,
+            "asset": {
+              "type": "image",
+              "src": "phTitleGraphic"
+            },
+            "start": 0,
+            "scale": 0.96,
+            "transition": {
+              "out": "fade"
+            },
+            "offset": {
+              "x": 0,
+              "y": 0.036
+            },
+            "position": "center",
+            "fit": "contain"
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "length": 999,
+            "asset": {
+              "type": "video",
+              "src": "phMainVidSource",
+              "volume": 1
+            },
+            "start": 0
+          }
+        ]
+      },
+      {
+        "clips": [
+          {
+            "length": "end",
+            "asset": {
+              "type": "audio",
+              "src": "phMusic",
+              "volume": 0.3
+            },
+            "start": 0
+          }
+        ]
+      }
+    ]
+  },
+  "output": {
+    "format": "mp4",
+    "fps": 25,
+    "size": {
+      "width": 1080,
+      "height": 1920
+    }
+  }
+}

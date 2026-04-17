@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""
+Generate an offline folder-mirror snapshot of the Outreach Hub.
+
+Fetches Baserow data once, bundles it into `_data.js`, then calls each real
+hub page renderer (from `execution/hub/*.py`) to produce a browsable folder
+of static HTML files. Zero renderer logic is duplicated here — whatever you
+see live on hub.reformchiropractic.app is what you get in the snapshot,
+minus the mutations (compose FAB, edit modals, etc. are read-only or hidden).
+
+How the offline hook works:
+    `hub/styles.py` `_JS_SHARED.fetchAll()` checks `window.__OFFLINE_FETCH`
+    first. `_data.js` sets that to a function that reads from
+    `window.__SNAPSHOT_DATA`, so every live page reads the bundled data
+    instead of hitting the network.
+
+Usage:
+    python execution/generate_hub_snapshot.py
+
+Output:
+    resources/hub_snapshot/
+        _data.js
+        index.html, attorney.html, patients.html, ...
+"""
+
+import json
+import os
+import re
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import requests
+from dotenv import load_dotenv
+
+# Make `hub` package importable when running from the repo root.
+sys.path.insert(0, str(Path(__file__).parent))
+
+from hub.billing import _billing_page
+from hub.constants import (
+    T_ATT_ACTS, T_ATT_VENUES, T_COM_ACTS, T_COM_VENUES,
+    T_GOR_ACTS, T_GOR_BOXES, T_GOR_VENUES, T_PI_ACTIVE,
+    T_PI_AWAITING, T_PI_BILLED, T_PI_CLOSED, T_PI_FINANCE, T_STAFF,
+)
+from hub.dashboard import _hub_page
+from hub.outreach import _directory_page
+from hub.pi_cases import _firms_page, _patients_page
+from hub.shells import _tool_page
+
+load_dotenv()
+BR_BASE = os.environ["BASEROW_URL"]
+_EMAIL  = os.environ["BASEROW_EMAIL"]
+_PASS   = os.environ["BASEROW_PASSWORD"]
+
+# Tables the live hub's `fetchAll()` reads from.
+TABLES = [
+    T_ATT_VENUES, T_ATT_ACTS,
+    T_GOR_VENUES, T_GOR_ACTS, T_GOR_BOXES,
+    T_COM_VENUES, T_COM_ACTS,
+    T_PI_ACTIVE, T_PI_BILLED, T_PI_AWAITING, T_PI_CLOSED, T_PI_FINANCE,
+    T_STAFF,
+]
+
+# Empty email → `_get_staff_role` short-circuits to "admin" without touching
+# Baserow, so every section renders without a live API call.
+SNAPSHOT_USER = {"email": "", "name": "Snapshot"}
+
+# `br`/`bt` feed `_JS_SHARED.format()` but are only referenced by fetchAll,
+# which is short-circuited offline — empty strings are fine.
+_ARGS = ("", "")
+
+
+def _routes():
+    """Return `[(filename, render_callable), ...]` for every snapshot-able page."""
+    u = SNAPSHOT_USER
+    return [
+        ("index.html",               lambda: _hub_page(*_ARGS, user=u)),
+        ("attorney.html",            lambda: _tool_page("attorney", *_ARGS, user=u)),
+        ("attorney_directory.html",  lambda: _directory_page("attorney", *_ARGS, user=u)),
+        ("guerilla.html",            lambda: _tool_page("gorilla", *_ARGS, user=u)),
+        ("guerilla_directory.html",  lambda: _directory_page("gorilla", *_ARGS, user=u)),
+        ("community.html",           lambda: _tool_page("community", *_ARGS, user=u)),
+        ("community_directory.html", lambda: _directory_page("community", *_ARGS, user=u)),
+        ("patients.html",            lambda: _patients_page(*_ARGS, stage="",         user=u)),
+        ("patients_active.html",     lambda: _patients_page(*_ARGS, stage="active",   user=u)),
+        ("patients_billed.html",     lambda: _patients_page(*_ARGS, stage="billed",   user=u)),
+        ("patients_awaiting.html",   lambda: _patients_page(*_ARGS, stage="awaiting", user=u)),
+        ("patients_closed.html",     lambda: _patients_page(*_ARGS, stage="closed",   user=u)),
+        ("firms.html",               lambda: _firms_page(*_ARGS, user=u)),
+        ("billing_collections.html", lambda: _billing_page("collections", *_ARGS, user=u)),
+        ("billing_settlements.html", lambda: _billing_page("settlements", *_ARGS, user=u)),
+    ]
+
+
+# ── Baserow auth + fetch ──────────────────────────────────────────────────────
+_JWT = None
+
+
+def _get_jwt():
+    r = requests.post(
+        f"{BR_BASE}/api/user/token-auth/",
+        json={"email": _EMAIL, "password": _PASS},
+        timeout=10,
+    )
+    r.raise_for_status()
+    return r.json()["token"]
+
+
+def fetch_all(tid):
+    global _JWT
+    if _JWT is None:
+        _JWT = _get_jwt()
+    rows, page = [], 1
+    while True:
+        r = requests.get(
+            f"{BR_BASE}/api/database/rows/table/{tid}/"
+            f"?size=200&page={page}&user_field_names=true",
+            headers={"Authorization": f"JWT {_JWT}"},
+            timeout=30,
+        )
+        r.raise_for_status()
+        d = r.json()
+        rows.extend(d["results"])
+        if not d["next"]:
+            break
+        page += 1
+    return rows
+
+
+# ── _data.js (bundles every table the hub's fetchAll reads) ───────────────────
+def build_data_js(data: dict) -> str:
+    blob = json.dumps(
+        {str(k): v for k, v in data.items()},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return (
+        "// Generated by generate_hub_snapshot.py — do not edit.\n"
+        f"window.__SNAPSHOT_DATA = {blob};\n"
+        "window.__OFFLINE_FETCH = async function(tid){\n"
+        "  return window.__SNAPSHOT_DATA[String(tid)] || [];\n"
+        "};\n"
+    )
+
+
+# ── HTML post-processing ──────────────────────────────────────────────────────
+# Every live hub route → its flat snapshot filename. Anything not in here
+# rewrites to '#' so dead links are visibly inert rather than silently 404.
+HREF_MAP = {
+    "/": "index.html",
+    "/attorney": "attorney.html",
+    "/attorney/directory": "attorney_directory.html",
+    "/guerilla": "guerilla.html",
+    "/guerilla/directory": "guerilla_directory.html",
+    "/community": "community.html",
+    "/community/directory": "community_directory.html",
+    "/patients": "patients.html",
+    "/patients/active": "patients_active.html",
+    "/patients/billed": "patients_billed.html",
+    "/patients/awaiting": "patients_awaiting.html",
+    "/patients/closed": "patients_closed.html",
+    "/firms": "firms.html",
+    "/billing/collections": "billing_collections.html",
+    "/billing/settlements": "billing_settlements.html",
+}
+
+_HREF_RE   = re.compile(r'''href=(["'])(/[^"']*)\1''')
+_SCRIPT_RE = re.compile(r'<script\b[^>]*>.*?</script>', re.DOTALL | re.IGNORECASE)
+
+_HEAD_INJECT = (
+    '<script src="_data.js"></script>'
+    '<style>'
+    '.compose-fab,.compose-overlay{display:none!important}'
+    '.tnav-signout,.drawer-mobile-link{display:none!important}'
+    'a[href="#"]{opacity:.4;cursor:not-allowed}'
+    '.snap-banner{background:#ea580c;color:#fff;padding:6px 14px;font-size:11px;'
+    'font-weight:600;text-align:center;letter-spacing:.4px;text-transform:uppercase;'
+    'position:sticky;top:48px;z-index:700}'
+    '</style>'
+)
+
+
+def _rewrite_href(m):
+    quote, path = m.group(1), m.group(2)
+    target = HREF_MAP.get(path, "#")
+    return f"href={quote}{target}{quote}"
+
+
+def _rewrite_hrefs_outside_scripts(html: str) -> str:
+    """Rewrite `href="/..."` everywhere except inside `<script>` blocks."""
+    parts, last = [], 0
+    for m in _SCRIPT_RE.finditer(html):
+        parts.append(_HREF_RE.sub(_rewrite_href, html[last:m.start()]))
+        parts.append(m.group(0))
+        last = m.end()
+    parts.append(_HREF_RE.sub(_rewrite_href, html[last:]))
+    return "".join(parts)
+
+
+def patch_html(html: str, ts: str) -> str:
+    html = html.replace("</head>", _HEAD_INJECT + "</head>", 1)
+    banner = f'<div class="snap-banner">Offline snapshot \u00b7 {ts} \u00b7 Read-only</div>'
+    html = html.replace("<body>", "<body>" + banner, 1)
+    return _rewrite_hrefs_outside_scripts(html)
+
+
+# ── main ──────────────────────────────────────────────────────────────────────
+def main():
+    out_dir = Path(__file__).parent.parent / "resources" / "hub_snapshot"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Snapshot -> {out_dir}")
+    print("\nFetching Baserow tables...")
+    data = {}
+    for tid in TABLES:
+        print(f"  table {tid:<4}...", end="", flush=True)
+        data[tid] = fetch_all(tid)
+        print(f" {len(data[tid])} rows")
+
+    print("\nWriting _data.js...")
+    (out_dir / "_data.js").write_text(build_data_js(data), encoding="utf-8")
+    data_kb = (out_dir / "_data.js").stat().st_size // 1024
+    print(f"  _data.js {data_kb:,} KB")
+
+    ts = datetime.now().strftime("%B %-d, %Y at %-I:%M %p") \
+        if sys.platform != "win32" \
+        else datetime.now().strftime("%B %#d, %Y at %#I:%M %p")
+
+    print("\nRendering pages...")
+    routes = _routes()
+    for filename, render in routes:
+        print(f"  {filename:<30}", end="", flush=True)
+        html = render()
+        html = patch_html(html, ts)
+        (out_dir / filename).write_text(html, encoding="utf-8")
+        print(f" {len(html) // 1024:>4} KB")
+
+    total_kb = sum(f.stat().st_size for f in out_dir.iterdir() if f.is_file()) // 1024
+    print(f"\n{len(routes)} pages + _data.js = {total_kb:,} KB total")
+    print(f"Open: {(out_dir / 'index.html').resolve()}")
+
+
+if __name__ == "__main__":
+    main()
