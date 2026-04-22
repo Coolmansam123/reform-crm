@@ -29,7 +29,7 @@ from fastapi.responses import JSONResponse
 from .access import _has_hub_access, _is_admin
 from .constants import (
     T_EVENTS, T_GOR_ACTS, T_GOR_BOXES, T_GOR_ROUTES, T_GOR_ROUTE_STOPS,
-    T_GOR_VENUES,
+    T_GOR_VENUES, T_COMPANIES, T_LEADS,
 )
 
 # Type: backend-agnostic cached-table fetcher. Each app passes its own.
@@ -517,7 +517,11 @@ async def update_box_days(request: Request, br: str, bt: str, user: dict,
 # ─────────────────────────────────────────────────────────────────────────────
 async def update_venue(request: Request, br: str, bt: str, user: dict,
                        venue_id: int) -> JSONResponse:
-    """Edit a guerilla venue's Promo Items (and other future fields)."""
+    """Edit a guerilla venue's Promo Items (and other future fields).
+
+    Phase 2b.3 sync: after writing the legacy venue row, also mirror the
+    change to the matching Company row (Legacy Source=guerilla_venue +
+    Legacy ID=venue_id) so the unified Companies view stays current."""
     if not _has_hub_access(user, "guerilla"):
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
     body = await request.json()
@@ -534,6 +538,34 @@ async def update_venue(request: Request, br: str, bt: str, user: dict,
         )
     if r.status_code != 200:
         return JSONResponse({"ok": False, "error": r.text[:300]}, status_code=r.status_code)
+
+    # Mirror to Companies (best-effort; failures don't fail the venue write).
+    # Filter by Legacy ID (numeric, safe) then confirm Legacy Source in code —
+    # single_select filters via the HTTP API require the option ID, not value.
+    if T_COMPANIES:
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                lookup = await client.get(
+                    f"{br}/api/database/rows/table/{T_COMPANIES}/?user_field_names=true"
+                    f"&filter__Legacy+ID__equal={venue_id}&size=5",
+                    headers={"Authorization": f"Token {bt}"},
+                )
+                if lookup.status_code == 200:
+                    matched = None
+                    for row in lookup.json().get("results", []):
+                        src = row.get("Legacy Source")
+                        if isinstance(src, dict): src = src.get("value")
+                        if src == "guerilla_venue":
+                            matched = row; break
+                    if matched:
+                        await client.patch(
+                            f"{br}/api/database/rows/table/{T_COMPANIES}/{matched['id']}/?user_field_names=true",
+                            headers={"Authorization": f"Token {bt}", "Content-Type": "application/json"},
+                            json=fields,  # Promo Items field name is identical on both sides
+                        )
+        except Exception:
+            pass
+
     return JSONResponse({"ok": True})
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -835,3 +867,88 @@ async def gorilla_route_delete(request: Request, br: str, bt: str, user: dict,
     if r.status_code in (200, 204):
         return JSONResponse({"ok": True})
     return JSONResponse({"error": r.text}, status_code=r.status_code)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/leads/capture — field-rep lead capture form
+# ─────────────────────────────────────────────────────────────────────────────
+async def capture_lead(
+    request: Request, br: str, bt: str, user: dict,
+    cached_rows: CachedRowsFn,
+    on_created: Callable[[dict, dict], Awaitable[None]] | None = None,
+    invalidate: Callable[..., Awaitable[None]] | None = None,
+) -> JSONResponse:
+    """Create a T_LEADS row from the field-rep Capture Lead form.
+
+    Reads: name, phone, email (optional), service, event_id (optional), notes.
+    Source = event name if event_id is provided, else "Field Capture".
+    Notes are prefixed with the capturing user's email.
+    Linked events get their "Lead Count" incremented.
+
+    `on_created`, if supplied, is awaited after a successful insert with
+    `(created_row, submitted_fields)` — the hub wrapper uses this to fire the
+    `new_lead` automation trigger. Field_rep passes None (no trigger firing).
+
+    `invalidate`, if supplied, is awaited with `(T_LEADS, T_EVENTS)` so the
+    caller's cache layer can drop stale entries.
+    """
+    if not T_LEADS:
+        return JSONResponse({"ok": False, "error": "not configured"}, status_code=503)
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+    phone = (body.get("phone") or "").strip()
+    email = (body.get("email") or "").strip()
+    service = (body.get("service") or "").strip()
+    event_id = body.get("event_id")
+    notes = (body.get("notes") or "").strip()
+    if not name or not phone:
+        return JSONResponse({"ok": False, "error": "name and phone required"}, status_code=400)
+
+    # Resolve the linked event (if any) for Source + lead-count bump
+    event = None
+    source = "Field Capture"
+    if event_id and T_EVENTS:
+        events = await cached_rows(T_EVENTS)
+        event = next((e for e in events if e.get("id") == int(event_id)), None)
+        if event:
+            source = event.get("Name") or "Event"
+
+    fields: dict = {
+        "Name": name,
+        "Phone": phone,
+        "Status": "New",
+        "Source": source,
+        "Reason": service,
+    }
+    if email:
+        fields["Email"] = email
+    if notes:
+        fields["Notes"] = f"[{user.get('email','')}] {notes}"
+    if event_id and T_EVENTS:
+        fields["Event"] = [int(event_id)]
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(
+            f"{br}/api/database/rows/table/{T_LEADS}/?user_field_names=true",
+            headers={"Authorization": f"Token {bt}", "Content-Type": "application/json"},
+            json=fields,
+        )
+        if event_id and T_EVENTS and event:
+            cur_count = event.get("Lead Count") or 0
+            await client.patch(
+                f"{br}/api/database/rows/table/{T_EVENTS}/{event['id']}/?user_field_names=true",
+                headers={"Authorization": f"Token {bt}", "Content-Type": "application/json"},
+                json={"Lead Count": cur_count + 1},
+            )
+
+    if invalidate is not None:
+        try: await invalidate(T_LEADS, T_EVENTS)
+        except Exception: pass
+
+    if r.status_code in (200, 201):
+        created = r.json()
+        if on_created is not None:
+            try: await on_created(created, fields)
+            except Exception: pass
+        return JSONResponse({"ok": True, "id": created.get("id")})
+    return JSONResponse({"ok": False, "error": r.text[:200]}, status_code=500)

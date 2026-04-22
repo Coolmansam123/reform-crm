@@ -82,6 +82,10 @@ a.tnav-grp-lbl.active { background:var(--nav-active); color:var(--text); }
 .tnav-signout { font-size:12px; color:var(--text3); padding:5px 10px; border-radius:6px;
                 border:1px solid var(--border); }
 .tnav-signout:hover { color:var(--text); background:var(--card-hover); }
+a.tnav-settings { font-size:15px; color:var(--text3); padding:4px 8px; border-radius:6px;
+                  text-decoration:none; line-height:1; }
+a.tnav-settings:hover { background:var(--card-hover); color:var(--text); }
+a.tnav-settings.active { background:var(--nav-active); color:var(--text); }
 
 /* Main */
 .main { width:100%; overflow-y:auto; min-width:0; }
@@ -543,6 +547,19 @@ body.login-body { display:block; }
 .m-tab.active { color:#ea580c; border-bottom-color:#ea580c; }
 .m-panel { display:none; }
 .m-panel.active { display:block; }
+/* Bulk-selection on list pages (tickets / leads / people / companies) */
+.bulk-check { width:16px; height:16px; cursor:pointer; accent-color:#3b82f6; vertical-align:middle; }
+.bulk-all   { width:16px; height:16px; cursor:pointer; accent-color:#3b82f6; vertical-align:middle; }
+.bulk-actions { display:none; gap:10px; align-items:center; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:8px 14px; margin-bottom:14px; font-size:13px; position:sticky; top:4px; z-index:20; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+.bulk-actions.on { display:flex; flex-wrap:wrap; }
+.bulk-actions .bulk-label { font-weight:600; color:var(--text); }
+.bulk-actions select { padding:5px 9px; border:1px solid var(--border); background:var(--bg); color:var(--text); border-radius:6px; font-size:12px; }
+.bulk-actions input[type=text], .bulk-actions input[type=date] { padding:5px 9px; border:1px solid var(--border); background:var(--bg); color:var(--text); border-radius:6px; font-size:12px; min-width:140px; }
+.bulk-actions button { padding:6px 12px; border:1px solid var(--border); background:var(--card); color:var(--text); border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+.bulk-actions button.primary { background:#3b82f6; color:#fff; border-color:#3b82f6; }
+.bulk-actions button.primary:hover { background:#2563eb; }
+.bulk-actions button:hover { border-color:var(--text3); }
+.bulk-actions .bulk-sep { color:var(--text4); margin:0 4px; }
 /* Calendar widget (dashboard mini + /calendar full page) */
 .cal-wrap { display:flex; flex-direction:column; height:100%; overflow:hidden; }
 .cal-month { padding:12px 14px 10px; border-bottom:1px solid var(--border); flex-shrink:0; }
@@ -580,6 +597,59 @@ body.login-body { display:block; }
   .cal-full .cal-month { width:58%; border-right:1px solid var(--border); border-bottom:none; padding:18px 22px; }
   .cal-full .cal-upcoming { flex:1; padding:8px 0; }
 }
+
+/* Full-page /calendar v2 — month-first grid with slide-out day panel */
+.cf-page { position:relative; padding:14px 18px 18px; min-height:calc(100vh - 120px); }
+.cf-toolbar { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:12px; }
+.cf-nav { display:flex; align-items:center; gap:6px; }
+.cf-navbtn { width:30px; height:30px; border:1px solid var(--border); background:var(--card); color:var(--text); border-radius:6px; cursor:pointer; font-size:18px; line-height:1; display:flex; align-items:center; justify-content:center; padding:0; }
+.cf-navbtn:hover { border-color:var(--text3); }
+.cf-todaybtn { padding:6px 12px; border:1px solid var(--border); background:var(--card); color:var(--text); border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; }
+.cf-todaybtn:hover { border-color:var(--text3); }
+.cf-title { font-size:18px; font-weight:700; color:var(--text); text-align:center; flex:1; }
+.cf-card { padding:0; overflow:hidden; }
+.cf-weekdays { display:grid; grid-template-columns:repeat(7,1fr); border-bottom:1px solid var(--border); }
+.cf-weekdays>div { padding:10px 8px; font-size:11px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.5px; text-align:left; }
+.cf-grid { display:grid; grid-template-columns:repeat(7,1fr); grid-auto-rows:minmax(110px,1fr); }
+.cf-cell { border-right:1px solid var(--border); border-bottom:1px solid var(--border); padding:6px 7px 4px; cursor:pointer; min-height:110px; display:flex; flex-direction:column; gap:3px; transition:background .12s; position:relative; overflow:hidden; }
+.cf-cell:nth-child(7n) { border-right:none; }
+.cf-cell:hover { background:rgba(59,130,246,.06); }
+.cf-cell.other-month { background:rgba(0,0,0,.08); }
+.cf-cell.other-month .cf-daynum { color:var(--text4); opacity:.55; }
+.cf-cell.today .cf-daynum { background:#ea580c; color:#fff; width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:700; }
+.cf-cell.selected { background:rgba(59,130,246,.12); box-shadow:inset 0 0 0 2px #3b82f6; }
+.cf-daynum { font-size:12px; font-weight:600; color:var(--text2); padding:1px 2px; }
+.cf-chips { display:flex; flex-direction:column; gap:2px; overflow:hidden; }
+.cf-chip { font-size:11px; line-height:1.25; color:#fff; background:#3b82f6; padding:2px 6px; border-radius:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cf-chip.allday { background:#059669; }
+.cf-chip-t { font-weight:700; opacity:.9; margin-right:4px; }
+.cf-more { font-size:10px; color:var(--text3); font-weight:600; padding:1px 4px; }
+@media (max-width:700px) {
+  .cf-grid { grid-auto-rows:minmax(72px,1fr); }
+  .cf-cell { min-height:72px; padding:4px 4px 2px; }
+  .cf-chip { font-size:10px; padding:1px 4px; }
+  .cf-chip-t { display:none; }
+  .cf-weekdays>div { padding:6px 4px; font-size:10px; }
+}
+
+/* Day slide-out panel */
+.cf-panel { position:fixed; top:0; right:0; width:min(420px,92vw); height:100vh; background:var(--card); border-left:1px solid var(--border); box-shadow:-4px 0 14px rgba(0,0,0,.25); transform:translateX(105%); transition:transform .22s ease-out; z-index:900; display:flex; flex-direction:column; }
+.cf-panel.open { transform:translateX(0); }
+.cf-panel-hdr { display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.cf-panel-date { font-size:14px; font-weight:700; color:var(--text); }
+.cf-panel-close { width:28px; height:28px; border:none; background:transparent; color:var(--text3); font-size:22px; cursor:pointer; border-radius:4px; line-height:1; }
+.cf-panel-close:hover { background:rgba(255,255,255,.05); color:var(--text); }
+.cf-panel-body { flex:1; overflow-y:auto; padding:14px 18px; }
+.cf-panel-foot { padding:12px 18px; border-top:1px solid var(--border); flex-shrink:0; }
+.cf-panel-evt { padding:12px 0; border-bottom:1px solid rgba(30,58,95,.3); }
+.cf-panel-evt:last-child { border-bottom:none; }
+.cf-panel-t { font-size:11px; font-weight:700; color:#3b82f6; text-transform:uppercase; letter-spacing:.4px; margin-bottom:4px; }
+.cf-panel-title { font-size:14px; font-weight:600; color:var(--text); line-height:1.3; margin-bottom:4px; }
+.cf-panel-loc { font-size:12px; color:var(--text3); margin-top:3px; }
+.cf-panel-desc { font-size:12px; color:var(--text2); margin-top:6px; line-height:1.45; white-space:pre-wrap; }
+.cf-panel-link { display:inline-block; margin-top:8px; font-size:12px; color:#3b82f6; text-decoration:none; font-weight:600; }
+.cf-panel-link:hover { text-decoration:underline; }
+.cf-panel-empty { padding:30px 10px; text-align:center; color:var(--text3); font-size:13px; }
 """
 
 # ─── Shared JS (template — call .format(br=..., bt=...) before use) ─────────────
@@ -636,5 +706,90 @@ function stampRefresh() {{
   _lastRefresh = new Date().toLocaleTimeString('en-US', {{hour:'numeric',minute:'2-digit'}});
   const el = document.getElementById('refresh-stamp');
   if (el) el.textContent = 'Updated ' + _lastRefresh;
+}}
+
+/* ── Bulk selection helper (shared across list pages) ────────────────────
+ * Usage:
+ *   1. Render rows with `<input type="checkbox" class="bulk-check" data-id="..">`
+ *      and an "all" checkbox with `class="bulk-all"` in the header (optional).
+ *   2. Render an actions bar with id="bulk-actions" — it is shown/hidden by
+ *      the helper based on selection count.
+ *   3. Inside the bar, a `<span id="bulk-count"></span>` gets the current count.
+ *   4. Call `initBulkSelection()` once after the list is rendered; re-call any
+ *      time rows are re-rendered. Returns `getSelectedIds()` + `clearBulk()`.
+ *   5. `submitBulkPatch(url, patch)` POSTs `{{ids, patch}}` and returns the parsed
+ *      JSON. UI shows a toast via `bulkToast(msg, kind)`.
+ */
+function initBulkSelection() {{
+  // Rebind fresh each call so re-rendered rows pick up handlers.
+  const boxes = document.querySelectorAll('.bulk-check');
+  const all   = document.querySelector('.bulk-all');
+  const bar   = document.getElementById('bulk-actions');
+  const ct    = document.getElementById('bulk-count');
+  function sync() {{
+    const n = document.querySelectorAll('.bulk-check:checked').length;
+    if (ct) ct.textContent = n;
+    if (bar) bar.classList.toggle('on', n > 0);
+    if (all) {{
+      const total = document.querySelectorAll('.bulk-check').length;
+      all.checked = total > 0 && n === total;
+      all.indeterminate = n > 0 && n < total;
+    }}
+  }}
+  boxes.forEach(function(b) {{ b.addEventListener('change', sync); }});
+  if (all) all.addEventListener('change', function() {{
+    document.querySelectorAll('.bulk-check').forEach(function(b) {{ b.checked = all.checked; }});
+    sync();
+  }});
+  sync();
+}}
+
+function getSelectedIds() {{
+  return Array.from(document.querySelectorAll('.bulk-check:checked'))
+    .map(function(b) {{ return parseInt(b.dataset.id, 10); }})
+    .filter(function(n) {{ return Number.isFinite(n); }});
+}}
+
+function clearBulk() {{
+  document.querySelectorAll('.bulk-check').forEach(function(b) {{ b.checked = false; }});
+  const all = document.querySelector('.bulk-all');
+  if (all) {{ all.checked = false; all.indeterminate = false; }}
+  const bar = document.getElementById('bulk-actions');
+  if (bar) bar.classList.remove('on');
+  const ct = document.getElementById('bulk-count');
+  if (ct) ct.textContent = '0';
+}}
+
+async function submitBulkPatch(url, patch) {{
+  const ids = getSelectedIds();
+  if (!ids.length) {{ bulkToast('Nothing selected', 'err'); return null; }}
+  const r = await fetch(url, {{
+    method: 'POST', headers: {{'Content-Type': 'application/json'}},
+    body: JSON.stringify({{ids, patch}}),
+  }});
+  const data = await r.json().catch(function() {{ return {{}}; }});
+  if (!r.ok) {{
+    bulkToast('Failed: ' + (data.error || r.status), 'err');
+    return null;
+  }}
+  const n = data.updated || 0;
+  const f = (data.failed || []).length;
+  bulkToast('Updated ' + n + (f ? ' (' + f + ' failed)' : ''), f ? 'err' : 'ok');
+  return data;
+}}
+
+function bulkToast(msg, kind) {{
+  let el = document.getElementById('bulk-toast');
+  if (!el) {{
+    el = document.createElement('div');
+    el.id = 'bulk-toast';
+    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;color:#fff;z-index:2000;box-shadow:0 4px 14px rgba(0,0,0,.35);transition:opacity .2s';
+    document.body.appendChild(el);
+  }}
+  el.textContent = msg;
+  el.style.background = kind === 'err' ? '#ef4444' : '#059669';
+  el.style.opacity = '1';
+  clearTimeout(el._timer);
+  el._timer = setTimeout(function() {{ el.style.opacity = '0'; }}, 2200);
 }}
 """

@@ -254,6 +254,54 @@ load();
     <div class="cd-body" id="pd-body"></div>
   </div>
 </div>
+
+<!-- Email Case Packet composer overlay (opens on top of patient detail) -->
+<div class="cd-overlay" id="pe-overlay" onclick="if(event.target===this)closePacketEmail()" style="z-index:950">
+  <div class="cd-modal" style="width:560px">
+    <div class="cd-header">
+      <div style="flex:1;min-width:0">
+        <div class="cd-title">&#9993;&#65039; Email Case Packet</div>
+        <div id="pe-subtitle" style="margin-top:4px;font-size:12px;color:rgba(255,255,255,0.75)"></div>
+      </div>
+      <div class="cd-header-actions">
+        <button class="cd-btn-close" onclick="closePacketEmail()">&times;</button>
+      </div>
+    </div>
+    <div class="cd-body" style="padding:18px 20px">
+      <div style="display:grid;gap:10px">
+        <label style="display:block">
+          <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">To</span>
+          <input id="pe-to" type="email" placeholder="attorney@firm.com"
+            style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:13px">
+          <span id="pe-to-hint" style="font-size:11px;color:var(--text3);margin-top:3px;display:block"></span>
+        </label>
+        <label style="display:block">
+          <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Cc (optional)</span>
+          <input id="pe-cc" type="text" placeholder="paralegal@firm.com"
+            style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:13px">
+        </label>
+        <label style="display:block">
+          <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Subject</span>
+          <input id="pe-subject" type="text"
+            style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:13px">
+        </label>
+        <label style="display:block">
+          <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px">Note</span>
+          <textarea id="pe-note" rows="5" placeholder="Optional message to accompany the attached packet"
+            style="width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:13px;resize:vertical;font-family:inherit"></textarea>
+        </label>
+        <div id="pe-attach-info" style="font-size:11px;color:var(--text3);padding:6px 8px;background:var(--card);border-radius:6px">
+          &#128196; Attachment: Case Packet PDF (auto-generated)
+        </div>
+        <div id="pe-msg" style="font-size:12px;min-height:16px;margin-top:2px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+          <button onclick="closePacketEmail()" class="btn btn-sec" style="font-size:12px;padding:6px 14px">Cancel</button>
+          <button id="pe-send-btn" onclick="sendPacketEmail()" class="btn btn-primary" style="font-size:12px;padding:6px 16px;background:#059669;border:none;color:#fff;border-radius:6px;cursor:pointer;font-weight:600">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 """
     js = f"""
 let _patients = [];
@@ -420,7 +468,19 @@ function _buildPatientDetailHTML(p) {{
     ['Address',    addr],
   ].filter(([_, v]) => v);
 
-  let html = '<div style="display:grid;gap:7px;margin-bottom:14px">';
+  let html = '';
+  html += '<div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap">'
+        +   '<a href="/api/patients/' + esc(p._stage) + '/' + p.id + '/packet.pdf" '
+        +     'target="_blank" rel="noopener" '
+        +     'class="btn btn-sec" style="font-size:12px;padding:5px 11px">'
+        +     '&#128196; Download Case Packet'
+        +   '</a>'
+        +   '<button onclick="openPacketEmail(' + p.id + ',\\'' + p._stage + '\\')" '
+        +     'class="btn btn-sec" style="font-size:12px;padding:5px 11px;cursor:pointer">'
+        +     '&#9993;&#65039; Email to Attorney'
+        +   '</button>'
+        + '</div>';
+  html += '<div style="display:grid;gap:7px;margin-bottom:14px">';
   html += firmRowHTML;
   rows.forEach(([lbl, val]) => {{
     html += '<div class="pc-row" style="margin:0"><span class="pc-lbl">' + esc(lbl) + '</span>'
@@ -574,6 +634,95 @@ function openPatientDetail(p) {{
 function closePatientDetail() {{
   document.getElementById('pd-overlay').classList.remove('open');
   document.body.style.overflow = '';
+}}
+
+// ── Email Case Packet composer ────────────────────────────────────────────
+let _peCtx = null;  // {{ patientId, stage, companyId }}
+
+async function openPacketEmail(patientId, stage) {{
+  _peCtx = {{ patientId, stage, companyId: null }};
+  const overlay = document.getElementById('pe-overlay');
+  // Reset fields + show loading state
+  document.getElementById('pe-to').value = '';
+  document.getElementById('pe-cc').value = '';
+  document.getElementById('pe-subject').value = 'Loading…';
+  document.getElementById('pe-note').value = '';
+  document.getElementById('pe-msg').textContent = '';
+  document.getElementById('pe-msg').style.color = '';
+  document.getElementById('pe-to-hint').textContent = '';
+  document.getElementById('pe-subtitle').textContent = '';
+  overlay.classList.add('open');
+  try {{
+    const r = await fetch('/api/patients/' + stage + '/' + patientId + '/packet/prefill');
+    if (!r.ok) throw new Error('prefill HTTP ' + r.status);
+    const d = await r.json();
+    document.getElementById('pe-to').value = d.to || '';
+    document.getElementById('pe-subject').value = d.subject || '';
+    document.getElementById('pe-subtitle').textContent = d.patient_name + (d.firm_name ? ' · ' + d.firm_name : '');
+    const hintEl = document.getElementById('pe-to-hint');
+    if (d.email_source === 'company') {{
+      hintEl.textContent = 'Pre-filled from ' + (d.firm_name || 'firm') + ' company record';
+    }} else if (d.email_source === 'contact') {{
+      hintEl.textContent = 'Pre-filled from a contact linked to ' + (d.firm_name || 'firm');
+    }} else if (d.firm_name) {{
+      hintEl.textContent = 'No email on file for ' + d.firm_name + ' — please enter one';
+    }} else {{
+      hintEl.textContent = 'No referring firm on the patient — please enter the recipient';
+    }}
+    _peCtx.companyId = d.company_id || null;
+  }} catch (e) {{
+    document.getElementById('pe-subject').value = 'Case Update — Reform Chiropractic';
+    document.getElementById('pe-msg').style.color = '#ef4444';
+    document.getElementById('pe-msg').textContent = 'Prefill failed: ' + (e.message || 'unknown');
+  }}
+}}
+
+function closePacketEmail() {{
+  document.getElementById('pe-overlay').classList.remove('open');
+  _peCtx = null;
+}}
+
+async function sendPacketEmail() {{
+  if (!_peCtx) return;
+  const to   = document.getElementById('pe-to').value.trim();
+  const cc   = document.getElementById('pe-cc').value.trim();
+  const subj = document.getElementById('pe-subject').value.trim();
+  const note = document.getElementById('pe-note').value;
+  const msg  = document.getElementById('pe-msg');
+  const btn  = document.getElementById('pe-send-btn');
+  msg.style.color = '';
+  msg.textContent = '';
+  if (!to || !to.includes('@')) {{
+    msg.style.color = '#ef4444';
+    msg.textContent = 'Please enter a valid recipient email.';
+    return;
+  }}
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try {{
+    const r = await fetch('/api/patients/' + _peCtx.stage + '/' + _peCtx.patientId + '/packet/email', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ to, cc, subject: subj, note }}),
+    }});
+    const d = await r.json().catch(() => ({{}}));
+    if (r.ok && d.ok) {{
+      msg.style.color = '#059669';
+      msg.textContent = '✓ Sent.';
+      btn.textContent = 'Sent';
+      setTimeout(closePacketEmail, 900);
+    }} else {{
+      msg.style.color = '#ef4444';
+      msg.textContent = 'Send failed: ' + (d.error || ('HTTP ' + r.status));
+      btn.disabled = false;
+      btn.textContent = 'Send';
+    }}
+  }} catch (e) {{
+    msg.style.color = '#ef4444';
+    msg.textContent = 'Network error: ' + (e.message || 'unknown');
+    btn.disabled = false;
+    btn.textContent = 'Send';
+  }}
 }}
 
 load();

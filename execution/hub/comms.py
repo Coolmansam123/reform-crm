@@ -1,9 +1,12 @@
 """
 Communications pages — contacts directory and email.
+
+Reads from the unified T_COMPANIES table (Phase 2b — 2026-04-21) rather than
+the three legacy venue tables. Category filtering is client-side.
 """
 from .shared import (
     _page,
-    T_ATT_VENUES, T_GOR_VENUES, T_COM_VENUES,
+    T_COMPANIES,
     T_PI_ACTIVE, T_PI_BILLED, T_PI_AWAITING, T_PI_CLOSED,
 )
 
@@ -11,8 +14,8 @@ from .shared import (
 def _contacts_page(br: str, bt: str, user: dict = None) -> str:
     header = (
         '<div class="header"><div class="header-left">'
-        '<h1>Contacts Directory</h1>'
-        '<div class="sub">All outreach contacts — attorney, gorilla &amp; community</div>'
+        '<h1>Companies Directory</h1>'
+        '<div class="sub">All companies — attorneys, guerilla venues, community orgs. People will get their own page in Phase 3.</div>'
         '</div></div>'
     )
     body = (
@@ -23,23 +26,41 @@ def _contacts_page(br: str, bt: str, user: dict = None) -> str:
         '<div style="width:1px;background:var(--border);align-self:stretch;margin:0 4px"></div>'
         '<button class="filter-btn" data-cat="" onclick="setCat(this)" style="opacity:0.7">All</button>'
         '<button class="filter-btn" data-cat="attorney"  onclick="setCat(this)" style="color:#a78bfa">Attorney</button>'
-        '<button class="filter-btn" data-cat="gorilla"   onclick="setCat(this)" style="color:#fb923c">Guerilla</button>'
+        '<button class="filter-btn" data-cat="guerilla"  onclick="setCat(this)" style="color:#fb923c">Guerilla</button>'
         '<button class="filter-btn" data-cat="community" onclick="setCat(this)" style="color:#34d399">Community</button>'
         '<input class="search-input" id="srch" placeholder="Search name or phone\u2026" oninput="applyFilters()" style="margin-left:auto;width:220px">'
         '<span id="cnt" style="font-size:12px;color:var(--text3);white-space:nowrap"></span>'
         '</div>'
+        '<div class="bulk-actions" id="bulk-actions">'
+        '<span class="bulk-label"><span id="bulk-count">0</span> selected</span>'
+        '<span class="bulk-sep">\u2022</span>'
+        '<select id="blk-status">'
+        '<option value="">Change status\u2026</option>'
+        '<option>Not Contacted</option><option>Contacted</option>'
+        '<option>In Discussion</option><option>Active Partner</option>'
+        '<option>Blacklisted</option>'
+        '</select>'
+        '<select id="blk-goal">'
+        '<option value="">Change outreach goal\u2026</option>'
+        '<option>Referral Partner</option><option>Co-Marketing</option>'
+        '<option>Event Presence</option><option>Sponsorship</option>'
+        '<option>Both</option>'
+        '</select>'
+        '<button class="primary" onclick="coBulkApply()">Apply</button>'
+        '<button onclick="clearBulk()">Clear</button>'
+        '</div>'
         '<div id="tbl"><div class="loading">Loading\u2026</div></div>'
         '</div>'
-        '\n<!-- New Contact modal -->'
+        '\n<!-- New Company modal -->'
         '<div class="compose-overlay" id="nc-overlay" onclick="if(event.target===this)closeNewContact()">'
         '<div class="compose-box" style="width:480px">'
-        '<h3>+ New Contact</h3>'
-        '<select id="nc-cat" class="compose-input" style="cursor:pointer" onchange="updateStatusOptions()">'
+        '<h3>+ New Company</h3>'
+        '<select id="nc-cat" class="compose-input" style="cursor:pointer">'
         '<option value="attorney">Attorney / Law Firm</option>'
-        '<option value="gorilla">Gorilla / Business Venue</option>'
+        '<option value="guerilla">Guerilla / Business Venue</option>'
         '<option value="community">Community Org</option>'
         '</select>'
-        '<input id="nc-name"  class="compose-input" placeholder="Contact / Firm name *">'
+        '<input id="nc-name"  class="compose-input" placeholder="Company name *">'
         '<input id="nc-phone" class="compose-input" placeholder="Phone">'
         '<input id="nc-email" class="compose-input" placeholder="Email">'
         '<input id="nc-addr"  class="compose-input" placeholder="Address">'
@@ -47,7 +68,7 @@ def _contacts_page(br: str, bt: str, user: dict = None) -> str:
         '<option value="Not Contacted">Not Contacted</option>'
         '<option value="Contacted">Contacted</option>'
         '<option value="In Discussion">In Discussion</option>'
-        '<option value="Active Relationship">Active Relationship</option>'
+        '<option value="Active Partner">Active Partner</option>'
         '</select>'
         '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px">'
         '<button class="compose-send" onclick="closeNewContact()" style="background:#1e3a5f;color:var(--text2)">Cancel</button>'
@@ -57,13 +78,14 @@ def _contacts_page(br: str, bt: str, user: dict = None) -> str:
         '</div></div>'
     )
     js = f"""
-const CATS = {{
-  attorney:  {{tid:{T_ATT_VENUES}, label:'Attorney',  color:'#7c3aed', nameField:'Law Firm Name', phoneField:'Phone Number', addrField:'Law Office Address'}},
-  gorilla:   {{tid:{T_GOR_VENUES}, label:'Gorilla',   color:'#ea580c', nameField:'Name',          phoneField:'Phone',        addrField:'Address'}},
-  community: {{tid:{T_COM_VENUES}, label:'Community', color:'#059669', nameField:'Name',          phoneField:'Phone',        addrField:'Address'}},
+// Category display metadata — hub labels/colors for the unified Companies feed
+const CAT_LABELS = {{
+  attorney:  {{label:'Attorney',  color:'#7c3aed'}},
+  guerilla:  {{label:'Guerilla',  color:'#ea580c'}},
+  community: {{label:'Community', color:'#059669'}},
+  other:     {{label:'Other',     color:'#64748b'}},
 }};
-const SC = {{'Active Relationship':'#059669','Active Partner':'#059669','Previous Relationship':'#7c3aed','In Discussion':'#d97706','Contacted':'#2563eb','Not Contacted':'#475569'}};
-const ACTIVE_STATUSES   = ['Active Relationship', 'Active Partner'];
+const SC = {{'Active Relationship':'#059669','Active Partner':'#059669','Previous Relationship':'#7c3aed','In Discussion':'#d97706','Contacted':'#2563eb','Not Contacted':'#475569','Blacklisted':'#ef4444'}};
 let _all = [];
 let _activeCat = '';
 let _activeStatusFilter = 'active';
@@ -94,17 +116,15 @@ function _effectiveStatus(r) {{
   const fc = _lookupFirmCounts(r.name);
   const hasCurrent = (fc.active || 0) + (fc.billed || 0) + (fc.awaiting || 0) > 0;
   const hasPast    = (fc.settled || 0) > 0;
-  if (hasCurrent || baseStatus === 'Active Relationship') return 'Active Relationship';
+  if (hasCurrent || baseStatus === 'Active Partner' || baseStatus === 'Active Relationship') return 'Active Partner';
   if (hasPast) return 'Previous Relationship';
   return baseStatus;
 }}
 
 async function load() {{
   document.getElementById('tbl').innerHTML = '<div class="loading">Loading\u2026</div>';
-  const [attRows, gorRows, comRows, piActive, piBilled, piAwaiting, piClosed] = await Promise.all([
-    fetchAll(CATS.attorney.tid),
-    fetchAll(CATS.gorilla.tid),
-    fetchAll(CATS.community.tid),
+  const [companies, piActive, piBilled, piAwaiting, piClosed] = await Promise.all([
+    fetchAll({T_COMPANIES}),
     fetchAll({T_PI_ACTIVE}),
     fetchAll({T_PI_BILLED}),
     fetchAll({T_PI_AWAITING}),
@@ -118,18 +138,18 @@ async function load() {{
   }});
   tally(piActive,'active'); tally(piBilled,'billed'); tally(piAwaiting,'awaiting'); tally(piClosed,'settled');
 
-  const toContact = (key, cfg, rows) => rows.map(r => ({{
-    cat: key, label: cfg.label, color: cfg.color,
-    name: r[cfg.nameField] || r['Name'] || '(unnamed)',
-    phone: r[cfg.phoneField] || '',
-    status: sv(r['Contact Status']) || 'Not Contacted',
-    followUp: r['Follow-Up Date'] || '',
-  }}));
-  _all = [
-    ...toContact('attorney',  CATS.attorney,  attRows),
-    ...toContact('gorilla',   CATS.gorilla,   gorRows),
-    ...toContact('community', CATS.community, comRows),
-  ].sort((a,b) => a.name.localeCompare(b.name));
+  _all = companies.map(r => {{
+    const cat = sv(r['Category']) || 'other';
+    const meta = CAT_LABELS[cat] || CAT_LABELS.other;
+    return {{
+      id: r.id,
+      cat, label: meta.label, color: meta.color,
+      name: r['Name'] || '(unnamed)',
+      phone: r['Phone'] || '',
+      status: sv(r['Contact Status']) || 'Not Contacted',
+      followUp: r['Follow-Up Date'] || '',
+    }};
+  }}).sort((a,b) => a.name.localeCompare(b.name));
   applyFilters();
   stampRefresh();
 }}
@@ -165,6 +185,7 @@ function applyFilters() {{
   }}
   document.getElementById('tbl').innerHTML =
     '<table class="data-table"><thead><tr>' +
+    '<th style="width:28px"><input type="checkbox" class="bulk-all"></th>' +
     '<th>Name</th><th>Category</th><th style="white-space:nowrap">Status</th><th>Phone</th><th class="c">Follow-Up</th><th></th>' +
     '</tr></thead><tbody>' +
     rows.map(r => {{
@@ -176,26 +197,36 @@ function applyFilters() {{
         duHtml = '<span style="color:' + col + ';font-weight:600">' + fmt(r.followUp) + '</span>';
       }}
       const nameEsc = esc(r.name);
-      return '<tr>' +
-        '<td style="font-weight:500">' + nameEsc + '</td>' +
+      const href = '/companies/' + r.id;
+      return '<tr style="cursor:pointer" onclick="if(event.target.tagName===\\'BUTTON\\'||event.target.tagName===\\'INPUT\\')return;location.href=\\'' + href + '\\'">' +
+        '<td onclick="event.stopPropagation()" style="width:28px"><input type="checkbox" class="bulk-check" data-id="' + r.id + '"></td>' +
+        '<td style="font-weight:500"><a href="' + href + '" style="color:inherit;text-decoration:none">' + nameEsc + '</a></td>' +
         '<td><span style="font-size:11px;padding:2px 8px;border-radius:10px;background:' + r.color + '22;color:' + r.color + ';font-weight:600">' + r.label + '</span></td>' +
         '<td><span style="font-size:11px;padding:2px 8px;border-radius:10px;background:' + sc + '22;color:' + sc + ';font-weight:600;white-space:nowrap">' + esc(r.effStatus) + '</span></td>' +
         '<td style="color:var(--text2)">' + esc(r.phone) + '</td>' +
         '<td class="c">' + duHtml + '</td>' +
-        '<td><button class="btn btn-ghost" style="padding:2px 10px;font-size:11px" onclick="openCompose(\\'\\',\\'Re: ' + nameEsc.replace(/'/g,"\\\\'") + '\\')" title="Compose">✉</button></td>' +
+        '<td><button class="btn btn-ghost" style="padding:2px 10px;font-size:11px" onclick="event.stopPropagation();openCompose(\\'\\',\\'Re: ' + nameEsc.replace(/'/g,"\\\\'") + '\\')" title="Compose">✉</button></td>' +
         '</tr>';
     }}).join('') +
     '</tbody></table>';
+  if (typeof initBulkSelection === 'function') initBulkSelection();
 }}
 
-function updateStatusOptions() {{
-  const cat = document.getElementById('nc-cat').value;
-  const active = cat === 'attorney' ? 'Active Relationship' : 'Active Partner';
-  document.getElementById('nc-status').innerHTML =
-    '<option value="Not Contacted">Not Contacted</option>' +
-    '<option value="Contacted">Contacted</option>' +
-    '<option value="In Discussion">In Discussion</option>' +
-    '<option value="' + active + '">' + active + '</option>';
+async function coBulkApply() {{
+  const patch = {{}};
+  const s = document.getElementById('blk-status').value;
+  const g = document.getElementById('blk-goal').value;
+  if (s) patch.contact_status = s;
+  if (g) patch.outreach_goal  = g;
+  if (!Object.keys(patch).length) {{ bulkToast('Pick a field to change', 'err'); return; }}
+  const data = await submitBulkPatch('/api/companies/bulk-patch', patch);
+  if (data && data.ok) {{
+    clearBulk();
+    document.getElementById('blk-status').value = '';
+    document.getElementById('blk-goal').value = '';
+    if (typeof load === 'function') load();
+    else applyFilters();
+  }}
 }}
 
 function openNewContact() {{
@@ -204,7 +235,6 @@ function openNewContact() {{
   document.getElementById('nc-email').value = '';
   document.getElementById('nc-addr').value  = '';
   document.getElementById('nc-msg').textContent = '';
-  updateStatusOptions();
   document.getElementById('nc-overlay').classList.add('open');
   setTimeout(function(){{ document.getElementById('nc-name').focus(); }}, 50);
 }}

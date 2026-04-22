@@ -1,10 +1,17 @@
 """
 Outreach pages — directory and map (shared across attorney, gorilla, community).
+
+Phase 2b.2 (2026-04-21): `_directory_page` and `_unified_directory_page` now
+read from T_COMPANIES filtered by Category, and T_ACTIVITIES for the activity
+thread. The legacy per-category venue + activity tables are kept for read-
+fallback by older hubs (guerilla_businesses, route_planner) but are no longer
+written to from here.
 """
 from .shared import (
     _page, _TEMPLATES_JS,
     T_ATT_VENUES, T_ATT_ACTS, T_GOR_VENUES, T_GOR_ACTS,
     T_COM_VENUES, T_COM_ACTS,
+    T_COMPANIES, T_ACTIVITIES,
     T_PI_ACTIVE, T_PI_BILLED, T_PI_AWAITING, T_PI_CLOSED,
 )
 from .guerilla import (
@@ -16,20 +23,23 @@ import os
 
 
 def _directory_page(tool_key: str, br: str, bt: str, user: dict = None) -> str:
+    # All three categories now read from the unified T_COMPANIES (filtered
+    # client-side by Category) + T_ACTIVITIES. Field names are unified.
+    _CATEGORY_VALUE = {'attorney': 'attorney', 'gorilla': 'guerilla', 'community': 'community'}
     CONF = {
-        'attorney':  {'label': 'PI Attorney',       'color': '#7c3aed', 'tid': T_ATT_VENUES,
-                      'actsTid': T_ATT_ACTS,  'actLinkField': 'Law Firm',
-                      'nameField': 'Law Firm Name',  'phoneField': 'Phone Number', 'addrField': 'Law Office Address',
-                      'activeStatus': 'Active Relationship',
-                      'stages': ['Not Contacted','Contacted','In Discussion','Active Relationship']},
-        'gorilla':   {'label': 'Guerilla Marketing', 'color': '#ea580c', 'tid': T_GOR_VENUES,
-                      'actsTid': T_GOR_ACTS,  'actLinkField': 'Business',
-                      'nameField': 'Name',            'phoneField': 'Phone',        'addrField': 'Address',
+        'attorney':  {'label': 'PI Attorney',        'color': '#7c3aed', 'tid': T_COMPANIES,
+                      'actsTid': T_ACTIVITIES, 'actLinkField': 'Company',
+                      'nameField': 'Name', 'phoneField': 'Phone', 'addrField': 'Address',
                       'activeStatus': 'Active Partner',
                       'stages': ['Not Contacted','Contacted','In Discussion','Active Partner']},
-        'community': {'label': 'Community',          'color': '#059669', 'tid': T_COM_VENUES,
-                      'actsTid': T_COM_ACTS,  'actLinkField': 'Organization',
-                      'nameField': 'Name',            'phoneField': 'Phone',        'addrField': 'Address',
+        'gorilla':   {'label': 'Guerilla Marketing', 'color': '#ea580c', 'tid': T_COMPANIES,
+                      'actsTid': T_ACTIVITIES, 'actLinkField': 'Company',
+                      'nameField': 'Name', 'phoneField': 'Phone', 'addrField': 'Address',
+                      'activeStatus': 'Active Partner',
+                      'stages': ['Not Contacted','Contacted','In Discussion','Active Partner']},
+        'community': {'label': 'Community',          'color': '#059669', 'tid': T_COMPANIES,
+                      'actsTid': T_ACTIVITIES, 'actLinkField': 'Company',
+                      'nameField': 'Name', 'phoneField': 'Phone', 'addrField': 'Address',
                       'activeStatus': 'Active Partner',
                       'stages': ['Not Contacted','Contacted','In Discussion','Active Partner']},
     }
@@ -154,7 +164,9 @@ function applyFilters() {{
 
 async function load() {{
   document.getElementById('venue-grid').innerHTML = '<div class="loading">Loading\u2026</div>';
-  _venues = await fetchAll({c["tid"]});
+  const CATEGORY = '{_CATEGORY_VALUE[tool_key]}';
+  const all = await fetchAll({c["tid"]});
+  _venues = all.filter(v => sv(v['Category']) === CATEGORY);
   buildFilters();
   applyFilters();
   stampRefresh();
@@ -171,20 +183,23 @@ load();
 # ──────────────────────────────────────────────────────────────────────────────
 def _unified_directory_page(br: str, bt: str, user: dict = None) -> str:
     import json as _json
+    # Phase 2b.2: all tools read T_COMPANIES (filtered client-side by Category)
+    # + T_ACTIVITIES. `category` is the Category field value on Companies that
+    # matches this tool. Field names are unified.
     CONF = {
-        'attorney':  {'label': 'PI Attorney',       'color': '#7c3aed', 'tid': T_ATT_VENUES,
-                      'actsTid': T_ATT_ACTS,  'actLinkField': 'Law Firm',
-                      'nameField': 'Law Firm Name',  'phoneField': 'Phone Number', 'addrField': 'Law Office Address',
-                      'activeStatus': 'Active Relationship',
-                      'stages': ['Not Contacted','Contacted','In Discussion','Active Relationship']},
-        'gorilla':   {'label': 'Guerilla Marketing', 'color': '#ea580c', 'tid': T_GOR_VENUES,
-                      'actsTid': T_GOR_ACTS,  'actLinkField': 'Business',
-                      'nameField': 'Name',            'phoneField': 'Phone',        'addrField': 'Address',
+        'attorney':  {'label': 'PI Attorney',        'color': '#7c3aed', 'tid': T_COMPANIES,
+                      'actsTid': T_ACTIVITIES, 'actLinkField': 'Company', 'category': 'attorney',
+                      'nameField': 'Name', 'phoneField': 'Phone', 'addrField': 'Address',
                       'activeStatus': 'Active Partner',
                       'stages': ['Not Contacted','Contacted','In Discussion','Active Partner']},
-        'community': {'label': 'Community',          'color': '#059669', 'tid': T_COM_VENUES,
-                      'actsTid': T_COM_ACTS,  'actLinkField': 'Organization',
-                      'nameField': 'Name',            'phoneField': 'Phone',        'addrField': 'Address',
+        'gorilla':   {'label': 'Guerilla Marketing', 'color': '#ea580c', 'tid': T_COMPANIES,
+                      'actsTid': T_ACTIVITIES, 'actLinkField': 'Company', 'category': 'guerilla',
+                      'nameField': 'Name', 'phoneField': 'Phone', 'addrField': 'Address',
+                      'activeStatus': 'Active Partner',
+                      'stages': ['Not Contacted','Contacted','In Discussion','Active Partner']},
+        'community': {'label': 'Community',          'color': '#059669', 'tid': T_COMPANIES,
+                      'actsTid': T_ACTIVITIES, 'actLinkField': 'Company', 'category': 'community',
+                      'nameField': 'Name', 'phoneField': 'Phone', 'addrField': 'Address',
                       'activeStatus': 'Active Partner',
                       'stages': ['Not Contacted','Contacted','In Discussion','Active Partner']},
     }
@@ -228,6 +243,7 @@ def _unified_directory_page(br: str, bt: str, user: dict = None) -> str:
         '<div style="flex:1;min-width:0"><div class="cd-title" id="cd-title"></div>'
         '<div id="cd-subtitle" style="margin-top:4px"></div></div>'
         '<div class="cd-header-actions">'
+        '<a class="cd-btn-email" href="#" onclick="return _openFullProfile()" title="Open full company profile">\u2197 Open full profile</a>'
         '<button class="cd-btn-email" onclick="showEmailTemplates(_cdVenue,_activeTool)" title="Email templates">\u2709 Email</button>'
         '<button class="cd-btn-close" onclick="closeContactDetail()">&times;</button>'
         '</div></div>'
@@ -279,7 +295,9 @@ async function loadVenues() {{
   document.getElementById('filter-bar').style.display = 'flex';
   document.getElementById('venue-grid').innerHTML = '<div class="loading">Loading\u2026</div>';
   document.getElementById('count-bar').textContent = 'Loading\u2026';
-  _venues = await fetchAll(VENUES_TID);
+  const conf = _CONF[_activeTool] || {{}};
+  const all = await fetchAll(VENUES_TID);
+  _venues = conf.category ? all.filter(v => sv(v['Category']) === conf.category) : all;
   buildFilters();
   applyFilters();
   stampRefresh();
@@ -383,6 +401,13 @@ function closeContactDetail() {{
   document.getElementById('cd-overlay').classList.remove('open');
   document.body.style.overflow = '';
   _cdVenue = null;
+}}
+
+function _openFullProfile() {{
+  // Modal shows the quick subset — navigate to /companies/{{id}} for the
+  // full HubSpot-style detail page (tabs, linked people, log lead, etc.).
+  if (_cdVenue && _cdVenue.id) window.location.href = '/companies/' + _cdVenue.id;
+  return false;
 }}
 
 function showEmailTemplates(v, category) {{

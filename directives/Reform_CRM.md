@@ -1,122 +1,289 @@
-# Outreach Hub — Reform CRM
+# Reform CRM / Operations Hub
 
 ## What It Is
 
-A password-protected web CRM hosted at `hub.reformchiropractic.app` (Modal + Cloudflare Worker proxy). Provides live dashboards across every major area of the Reform Chiropractic operation, all backed by Baserow.
+A password-protected web app at `hub.reformchiropractic.app` (Modal + Cloudflare Worker proxy) that acts as Reform Chiropractic's internal operations platform. Lives on top of Baserow; wraps dashboards, a PI pipeline, marketing outreach tools, a HubSpot-style CRM (Companies / People / Activities), an internal helpdesk, and a Google Calendar view — all behind Google Workspace SSO.
 
-**Entry point:** `execution/modal_outreach_hub.py` — Modal FastAPI app (routes + auth + Baserow proxy). All page-render functions live in `execution/hub/` as themed modules (see **Code Structure** below).
+**Entry point:** [execution/modal_outreach_hub.py](../execution/modal_outreach_hub.py) — Modal FastAPI app (routes + auth + Baserow proxy). All page-render functions live in [execution/hub/](../execution/hub/) as themed modules (see **Code Structure** below).
 
 **Live URL:** `https://hub.reformchiropractic.app`
 **Raw Modal URL:** `https://reformtechops--outreach-hub-web.modal.run`
-**Last deployed:** 2026-04-03
 
 ---
 
-## Current Pages (Live)
+## Access Model
 
-| Route | Description | Status |
-|-------|-------------|--------|
-| `/login` | Google OAuth sign-in page | Live |
-| `/auth/google` | Initiate Google OAuth flow | Live |
-| `/auth/google/callback` | OAuth callback — creates session | Live |
-| `/logout` | Clear session | Live |
-| `POST /api/gmail/send` | Send email via authenticated user's Gmail | Live |
-| `GET /api/gmail/threads?contact_email=` | Fetch Gmail threads for a contact | Live |
-| `/` | Command Center — combined stats + alerts | Live |
-| `/attorney` | PI Attorney pipeline dashboard | Live |
-| `/guerilla` | Guerilla Marketing pipeline dashboard | Live |
-| `/community` | Community Outreach pipeline dashboard | Live |
-| `/attorney/map` | Interactive attorney map | Live |
-| `/guerilla/map` | Interactive guerilla map | Live |
-| `/community/map` | Interactive community map | Live |
-| `/patients` | Patient Rolodex — all PI stages | Live |
-| `/patients/active` | Active treatment patients | Live |
-| `/patients/billed` | Billed cases | Live |
-| `/patients/awaiting` | Awaiting/negotiating | Live |
-| `/patients/closed` | Closed cases | Live |
-| `/firms` | Law firm overview | Live |
-| `/billing/collections` | Outstanding balances + follow-up tracking | Live |
-| `/billing/settlements` | Settlement records + financials | Live |
-| `/guerilla/log` | Log Field Activity — standalone form page (5 forms) | Live |
-| `/guerilla/events/internal` | Internal Events — tabbed by type (BOL, MMS, L&L, HAS) | Live |
-| `/guerilla/events/external` | External Events — pipeline by Event Status | Live |
-| `/guerilla/businesses` | Businesses Reached — all venues with activity counts | Live |
-| `/guerilla/boxes` | Massage Box Tracking — T_GOR_BOXES | Live |
-| `/guerilla/routes` | Field Route list — admin view | Live |
-| `/guerilla/routes/new` | Route builder — create ordered stop list | Live |
-| `/m` | Mobile Hub home — field staff landing page | Live |
-| `/m/log` | Mobile Quick Log — 5 GFR form cards | Live |
-| `/m/route` | Mobile Today's Route — stop list with check-in | Live |
-| `/m/recent` | Mobile Recent Logs — last 20 activity records | Live |
-| `GET /api/geocode` | Server-side Nominatim reverse geocode | Live |
-| `GET /api/guerilla/routes/today` | Field rep: today's active route + stops | Live |
-| `PATCH /api/guerilla/routes/stops/{id}` | Update stop status (Pending/Visited/Skipped) | Live |
-| `POST /api/guerilla/routes` | Create route + stops | Live |
-| `PATCH /api/guerilla/routes/{id}/status` | Toggle route Draft/Active/Completed | Live |
-| `/contacts` | Contacts (placeholder) | Coming Soon |
-| `/social` | Social Media (placeholder) | Coming Soon |
-| `/social/history` | Social Media History (placeholder) | Coming Soon |
-| `/calendar` | Calendar (placeholder) | Coming Soon |
+Every page is gated on one of two things:
+
+1. **`_is_admin(user)`** — full access, based on an allowlist in [hub/access.py](../execution/hub/access.py).
+2. **`_has_hub_access(user, hub_key)`** — per-hub permission driven by the `Allowed Hubs` multi-select on the `T_STAFF` (815) row for that user.
+
+`ALL_HUB_KEYS` enumerates the valid hub keys: `attorney`, `guerilla`, `community`, `pi_cases`, `billing`, `communications`, `social`, `calendar`, `tickets`. When a new hub is added, the key must be added to `ALL_HUB_KEYS` *and* to the `Allowed Hubs` single_select options on T_STAFF (via Baserow field PATCH).
+
+Non-admins who aren't allow-listed for a hub are redirected to `/` (the dashboard); the dashboard itself strips down to whatever hubs they do have. A view-mode toggle on `/settings` lets the user "see the dashboard as if I only had hub X" — scoped only to admins listed in `VIEW_AS_EMAILS` (currently just `techops@reformchiropractic.com`).
 
 ---
 
-## Baserow Tables
+## Routes
 
-### Outreach
+### Public / auth
+| Route | Description |
+|---|---|
+| `/login` | Google OAuth sign-in |
+| `/auth/google` | Initiate OAuth flow |
+| `/auth/google/callback` | OAuth callback — creates session |
+| `/logout` | Clear session |
+| `/settings` | Per-user profile + view-mode toggle (admin only for view mode) |
+
+### Dashboard & calendar
+| Route | Description |
+|---|---|
+| `/` | Command Center — KPI tiles + alerts + calendar widget, scoped by `Allowed Hubs` |
+| `/calendar` | Full-bleed month view of the signed-in user's primary Google Calendar; click a day for a slide-out event panel; "+ Add event" schedules on your primary calendar |
+
+### CRM (Companies / People / Activities)
+| Route | Description |
+|---|---|
+| `/companies` | (alias of `/contacts`) Companies Directory — unified across Attorney / Guerilla / Community categories |
+| `/companies/{id}` | Company detail — inline-editable profile + Activity / History tabs + linked People sidebar |
+| `/people` | People list + `+ New Person` modal with company picker |
+| `/people/{id}` | Person detail with Activity timeline |
+
+### Ticketing (internal helpdesk)
+| Route | Description |
+|---|---|
+| `/tickets` | Ticket list — filter by status / priority / assignee |
+| `/tickets/{id}` | Ticket detail — inline status/priority/assignee/category edit + comments thread |
+
+### Outreach pipelines
+| Route | Description |
+|---|---|
+| `/attorney`, `/guerilla`, `/community` | Per-tool pipeline dashboards |
+| `/attorney/map`, `/guerilla/map`, `/community/map` | Interactive maps (per tool) |
+
+### PI cases & billing
+| Route | Description |
+|---|---|
+| `/patients` | Patient Rolodex — all PI stages |
+| `/patients/active`, `/patients/billed`, `/patients/awaiting`, `/patients/closed` | Per-stage views |
+| `/firms` | Law firm overview (with firm-history timeline) |
+| `/billing/collections` | Outstanding balances + follow-up tracking |
+| `/billing/settlements` | Settlement records + financials |
+
+### Guerilla sub-pages
+| Route | Description |
+|---|---|
+| `/guerilla/log` | Standalone GFR form page (5 forms) |
+| `/guerilla/events/internal` | Internal Events — tabbed by type (BOL, MMS, L&L, HAS) |
+| `/guerilla/events/external` | External Events — pipeline by Event Status |
+| `/guerilla/businesses` | Businesses Reached — all venues with activity counts |
+| `/guerilla/boxes` | Massage Box Tracking |
+| `/guerilla/routes` | Field Route list — admin view |
+| `/guerilla/routes/new` | Route builder |
+
+### Communications
+| Route | Description |
+|---|---|
+| `/communications/email` | Compose + thread view per contact (Gmail) |
+
+### Social
+| Route | Description |
+|---|---|
+| `/social`, `/social/poster`, `/social/history` | Social poster + scheduler |
+
+### APIs (non-exhaustive)
+| Method / Path | Purpose |
+|---|---|
+| `GET /api/data/{tid}` | Cached Baserow passthrough (paginated) |
+| `GET /api/dashboard` | Consolidated stats for the Command Center |
+| `GET /api/calendar/events` | User's primary Google Calendar. Accepts `?start=ISO&end=ISO&max=N&calendar_id=X` (defaults: now → now+20 events, `calendar_id=primary`) |
+| `POST /api/meetings` | Create event on user's primary Google Calendar with `sendUpdates=all`; auto-logs an Activity when `company_id` / `contact_id` provided |
+| `POST /api/gmail/send`, `GET /api/gmail/threads?contact_email=` | Gmail send + threads |
+| `GET/POST /api/tickets` | List / create tickets |
+| `GET/PATCH /api/tickets/{id}` | Fetch / update; auto-appends a system comment for status + assignee changes |
+| `GET/POST /api/tickets/{id}/comments` | Thread |
+| `GET/PATCH /api/companies/{id}` | Read / update a Company. PATCH also mirrors the write to the matching legacy venue row (see **Bi-directional sync** below) |
+| `GET /api/companies/{id}/people`, `GET/POST /api/companies/{id}/activities` | Linked entities + activity feed |
+| `GET/POST /api/people` | List / create |
+| `GET/PATCH /api/people/{id}` | Read / update |
+| `GET/POST /api/people/{id}/activities` | Activity feed for a person |
+| `GET/PATCH /api/patients/{stage}/{id}`, `.../firm` | Patient edits (firm edits update `Firm History`) |
+| `POST /api/guerilla/log` | Field Report submission |
+| `PATCH /api/guerilla/boxes/{id}/pickup` | Transition massage box to Picked Up |
+| `POST /api/guerilla/routes`, `PATCH /api/guerilla/routes/{id}/status`, `PATCH /api/guerilla/routes/stops/{id}` | Route / stop writes |
+| `GET /api/geocode` | Server-side Nominatim reverse geocode |
+
+Every endpoint runs through `_get_session` (401 on unauthenticated) and the appropriate `_has_hub_access` check (403 on denied); writes call `_invalidate(tid)` on the touched tables so the in-memory cache reflects fresh data.
+
+---
+
+## Baserow Layout
+
+When a new domain comes online, prefer creating a **new database** rather than piling into an existing one. Current databases:
+
+| Database | ID | Purpose |
+|---|---|---|
+| Reform Chiropractic CRM | 197 | Companies, Contacts, Activities |
+| Law Firm Directory | 198 | Attorney venues (legacy) + activities + PI stages |
+| Gorilla Marketing | 203 | Guerilla venues (legacy), activities, boxes, routes, stops |
+| Community Outreach | 204 | Community venues (legacy) + activities |
+| Operations Hub | 206 | Tickets + Ticket Comments (created 2026-04-21) |
+
+### CRM tables (DB 197 — Reform Chiropractic CRM)
+
+| Table | ID | Notes |
+|---|---|---|
+| Companies | 820 | Unified across categories. `Category` (Attorney / Guerilla / Community). `Legacy Source` + `Legacy ID` stamps every row so writes can mirror back to the per-category legacy venue table. |
+| Contacts | 821 | People. `Primary Company` is a link_row → Companies. |
+| Activities | 822 | Unified activity log. `Company` + optional `Contact` link_rows. `Kind` is one of `user_activity`, `edit`, `note`, `creation`. `Type` includes `Meeting` (auto-logged from meeting scheduler). |
+
+### Outreach legacy tables
+
+These still exist and are still written by the older hubs (guerilla route-stop flows, GFR log submissions, field-rep tooling via the routes domain). The Companies table shadows them; edits go through the bi-directional sync layer below.
+
 | Tool | Venues | Activities | Extra |
-|------|--------|------------|-------|
+|---|---|---|---|
 | Attorney | 768 (Law Firms) | 784 | — |
-| Guerilla | 790 (Business Venues) | 791 | 800 (Massage Boxes) |
+| Guerilla | 790 (Business Venues) | 791 | 800 (Massage Boxes), 801 (Routes), 802 (Route Stops) |
 | Community | 797 (Community Orgs) | 798 | — |
-
-**Venue fields:** `Contact Status` (single_select), `Follow-Up Date`, `Type`, name field
-**Activity fields:** `Date`, `Type`, `Outcome`, `Contact Person`, `Summary`, `Follow-Up Date`, `Event Status` (single_select, External Event only — Prospective/Approved/Scheduled/Completed, field ID 8092)
 
 **Pipeline stages:**
 - Attorney: Not Contacted → Contacted → In Discussion → Active Relationship
-- Guerilla/Community: Not Contacted → Contacted → In Discussion → Active Partner
+- Guerilla / Community: Not Contacted → Contacted → In Discussion → Active Partner
 
-### PI Cases
+### Bi-directional sync (Companies ↔ legacy venues)
+
+Instead of rewriting every legacy hub to use Companies, the hub mirrors writes in both directions:
+
+- **Forward (`PATCH /api/companies/{id}`):** after writing the Companies row, `_mirror_to_legacy_venue()` looks up the matching legacy venue row via the Company's `Legacy Source` + `Legacy ID` and PATCHes it. Handles per-category field-name translation (e.g. `Name` → `Law Firm Name`) and status reverse-map (`Active Partner` → `Active Relationship` for attorneys, `Active Partner` → `Partner` for guerilla).
+- **Reverse:** `guerilla_api.update_venue` mirrors writes back to Companies by looking up the Company with matching `Legacy ID`. Same for `/api/contacts` POST from the Comms hub — creates dual-write to legacy and to Companies.
+- **Net effect:** edits from either side (detail pages or legacy hubs) stay in sync; legacy hubs and their external consumers (route planner, field-rep site on Coolify, Events, etc.) keep reading venue tables and see current data.
+
+### Tickets tables (DB 206 — Operations Hub)
+
+| Table | ID | Notes |
+|---|---|---|
+| Tickets | 818 | `Title`, `Description`, `Status` (Open / In Progress / Waiting / Resolved / Closed), `Priority`, `Category`, `Reporter`, `Assignee`, `Created`, `Updated`, `Resolution Notes`. |
+| Ticket Comments | 819 | `Ticket` link_row, `Author`, `Body`, `Kind` (`comment`, `status_change`, `assignment`, `creation`), `Created`. System comments are auto-written on state changes by the PATCH endpoint. |
+
+### PI cases (DB 198 tables)
+
 | Table | ID | Description |
-|-------|----|-------------|
+|---|---|---|
 | Active Treatment | 775 | Currently in treatment |
 | Pt. Billed | 773 | Billed, pending resolution |
 | Awaiting & Negotiating | 776 | Awaiting settlement |
 | CLOSED | 772 | Fully closed cases |
 | Finance | 781 | Settlements + collections |
 
-**PI firm-history data model (2026-04-14):**
-- `Law Firm Name` (text) — always the **current** firm only
-- `Firm History` (long_text, field IDs: 775=8526, 773=8527, 776=8528, 772=8529) — chain of past → current firms
-- Format: `OldFirm1 (until YYYY-MM-DD) -> OldFirm2 (until YYYY-MM-DD) -> CurrentFirm (current)`
-  - Legacy entries (pre-2026-04-14) have no dates: `OldFirm -> CurrentFirm (current)`
-  - Writes made via the hub's `PATCH /api/patients/{stage}/{id}/firm` endpoint add `(until <today>)` to the outgoing firm
-- The legacy approach stored this as a `Firm history:` line inside `Case Notes` — all 103 such rows were migrated to the new field by `execution/migrate_firm_history.py`. Hub reads the new field first and falls back to Case Notes for safety.
-- To change a patient's lawyer, use the Edit button in the hub patient detail modal (autocompletes from T_ATT_VENUES=768). Do NOT edit `Law Firm Name` directly — it bypasses history tracking.
+**Firm-history data model:**
+- `Law Firm Name` (text) — always the **current** firm only.
+- `Firm History` (long_text, field IDs: 775=8526, 773=8527, 776=8528, 772=8529) — chain of past → current firms.
+- Format: `OldFirm1 (until YYYY-MM-DD) -> OldFirm2 (until YYYY-MM-DD) -> CurrentFirm (current)`. Legacy entries (pre-2026-04-14) have no dates: `OldFirm -> CurrentFirm (current)`. Writes made via `PATCH /api/patients/{stage}/{id}/firm` add `(until <today>)` to the outgoing firm.
+- To change a patient's lawyer, use the Edit button in the hub patient detail modal (autocompletes from T_ATT_VENUES=768). **Never edit `Law Firm Name` directly** — it bypasses history tracking.
 
-### Massage Boxes
-- Table 800 in Baserow database 203 (Guerilla Marketing)
-- Fields: Business (link_row → 790), Date Placed, Date Removed, Location Notes, Status, Leads Generated, Notes
-- `.env` key: `GORILLA_MASSAGE_BOXES_TABLE_ID=800`
+### Staff / roles
 
-### Guerilla Routes
-- **T_GOR_ROUTES = 801** — Admin-created route definitions
-  - Fields: Name (primary/text), Date, Assigned To (email), Status (Draft/Active/Completed)
-- **T_GOR_ROUTE_STOPS = 802** — Ordered venue stops per route
-  - Fields: Name (primary), Route (link_row → 801), Venue (link_row → 790), Stop Order (number), Status (Pending/Visited/Skipped/Not Reached), Notes (long_text), Completed At (text), Completed By (text), Check-In Lat (number, 7 dp), Check-In Lng (number, 7 dp)
-  - **Historic bug:** before 2026-04-14, `Notes`/`Completed At`/`Completed By` were silently dropped because the fields didn't exist — code was PATCHing nonexistent field names. Added via `execution/add_route_stop_fields.py`.
-  - **GPS check-ins:** mobile browser captures lat/lng via `watchPosition` and sends them in the PATCH body when marking a stop Visited. Admin view at `/guerilla/routes` renders a "📍 check-in" link per stop that opens Google Maps at those coords.
-  - **Activity drill-down on admin view:** activities logged at a stop are matched by `Business.id === stop.venue_id && Date === route.date` and shown inline under the stop. No direct link_row — this is an implicit join.
-- **Box pickup on routes:** stops whose venue has an Active massage box past its `Pickup Days` threshold get a pending-pickup badge in three places:
-  1. Route builder (`/guerilla/routes/new`) — banner at top + badge on search results and selected stops
-  2. Mobile route view (`/m/route`) — badge in the stop sheet + prominent pickup notice
-  3. Admin view (`/guerilla/routes`) — badge on stop detail row
-  When a field rep marks a stop Visited on mobile, the mobile `markRouteStop` JS follows up with a `PATCH /api/guerilla/boxes/{box_id}/pickup` call to auto-transition the matching box to `Picked Up` status and stamp `Date Removed`. That endpoint was relaxed from admin-only to guerilla-hub-access so field reps can trigger it.
+| Table | ID | Notes |
+|---|---|---|
+| T_STAFF | 815 | `Email`, `Name`, `Role`, `Allowed Hubs` (multi-select driving per-hub access). 5-min in-memory cache in `hub/access.py`. |
+| T_EVENTS | 816 | Marketing / external events |
+| T_LEADS | 817 | Public lead-form submissions |
 
-**Baserow field-format gotcha:** when POST/PATCHing rows with `user_field_names=true`, link_row fields take a **plain list of integer IDs** (`[123]` not `[{"id": 123}]`), and single_select fields take the **plain string value** (`"Active"` not `{"value": "Active"}`). The `{"id": ...}` / `{"value": ...}` shapes are only in GET responses. Two endpoints were latently broken by this (`create_box`, `pickup_box`) — fixed 2026-04-14. Check any other row-write endpoint in `modal_outreach_hub.py` that touches single_selects or link_rows if you see `ERROR_REQUEST_BODY_VALIDATION`.
-- `.env` keys: `T_GOR_ROUTES=801`, `T_GOR_ROUTE_STOPS=802`
-- Modal secrets: `T_GOR_ROUTES`, `T_GOR_ROUTE_STOPS`
-- Created via: `python execution/setup_gorilla_routes.py`
+### Baserow field-format gotchas (bite-marks from past bugs)
+
+1. **Single-select writes** take the **plain string value** (`"Open"`), not the dict form (`{"value": "Open"}`). Dict form returns `ERROR_REQUEST_BODY_VALIDATION`. (`{"value": ...}` / `{"id": ...}` shapes only appear in GET responses.)
+2. **Link-row writes** take a plain list of integer IDs (`[123]`), not `[{"id": 123}]`.
+3. **Cross-database link_rows are forbidden** (`ERROR_LINK_ROW_TABLE_NOT_IN_SAME_DATABASE`). The unified `Activities` table lives inside DB 197 because that's where Companies and Contacts live.
+4. **Silent field drops:** PATCHing a field that doesn't exist on the table returns 200 but writes nothing. The Route Stops table hit this in 2026-04-14 (Notes / Completed At / Completed By) — always confirm field exists before wiring into an endpoint.
+5. **Missing import trap:** 401 on a smoke-test curl only proves the auth guard runs, not the handler body. Verify every symbol referenced inside `modal_outreach_hub.py` has a matching import — a `NameError` otherwise only surfaces when a real user hits the page.
+6. **Emoji above U+FFFF:** use the 8-digit `\U0001xxxx` form, never surrogate pairs (`\ud83d\udccd`). Python 3 on Modal's Linux runtime rejects surrogates when Starlette encodes the HTML response to UTF-8.
+
+---
+
+## Code Structure
+
+Thin entry point (`modal_outreach_hub.py`) wires Modal + FastAPI; themed modules under `hub/` render pages.
+
+```
+execution/
+├── modal_outreach_hub.py         ← Modal app, FastAPI routes, auth, Baserow proxy, sync layer
+└── hub/
+    ├── __init__.py
+    │
+    │   ── Infrastructure ──
+    ├── shared.py                 ← thin facade — re-exports everything below for back-compat
+    ├── constants.py              ← table IDs (T_*) + _TEMPLATES_JS email bodies
+    ├── access.py                 ← _is_admin, _has_hub_access, _get_allowed_hubs, ALL_HUB_KEYS, _can_view_as
+    ├── styles.py                 ← _CSS (desktop + mobile + light/dark) + _JS_SHARED template
+    ├── nav.py                    ← _topnav — desktop top nav + hamburger drawer
+    ├── compose.py                ← _COMPOSE_HTML / _COMPOSE_JS — email FAB overlay
+    ├── shells.py                 ← _page / _forbidden_page / _tool_page
+    │
+    │   ── Feature pages ──
+    ├── dashboard.py              ← _login_page, _hub_page, _calendar_page, _coming_soon_page
+    ├── settings.py               ← _settings_page (profile + view-mode toggle)
+    ├── outreach.py               ← _directory_page, _unified_directory_page, _map_page
+    ├── pi_cases.py               ← _patients_page (rolodex + detail modal), _firms_page
+    ├── billing.py                ← _billing_page
+    ├── comms.py                  ← Companies Directory, _communications_email_page
+    ├── contact_detail.py         ← legacy contact detail (now reads T_COMPANIES + T_ACTIVITIES)
+    ├── company_detail.py         ← _company_detail_page (HubSpot-style; tabs, inline edit, linked People sidebar)
+    ├── people.py                 ← _people_list_page, _person_detail_page
+    ├── meetings.py               ← shared meeting_modal_html() + meeting_modal_js() for any page with "+ Schedule meeting"
+    ├── tickets.py                ← _tickets_list_page, _ticket_detail_page
+    ├── events.py                 ← _event_detail_page, _lead_form_page (public), _leads_dashboard_page
+    ├── social.py                 ← _social_poster_hub_page, _social_schedule_page
+    │
+    │   ── Guerilla area ──
+    ├── guerilla.py                ← GFR form helpers
+    ├── guerilla_api.py            ← venue CRUD (reverse-syncs to Companies)
+    ├── guerilla_map.py             ← _gorilla_map_page
+    ├── guerilla_pages.py          ← log, events, businesses, boxes, routes
+    └── route_planner.py           ← unified cross-tool map, outreach list
+```
+
+### Where does X live?
+
+| Want to change… | Edit this file |
+|---|---|
+| CSS (colors, spacing, responsive) | `hub/styles.py` → `_CSS` |
+| Shared JS helpers (`fetchAll`, `sv`, `esc`, `fmt`, `daysUntil`) | `hub/styles.py` → `_JS_SHARED` |
+| Top nav / dropdowns | `hub/nav.py` → `_topnav` |
+| Page shell | `hub/shells.py` → `_page` |
+| Role / hub access rules | `hub/access.py` |
+| Baserow table IDs | `hub/constants.py` |
+| Command Center (`/`) | `hub/dashboard.py` → `_hub_page` |
+| Calendar (`/calendar`) | `hub/dashboard.py` → `_calendar_page` + `_FULL_CAL_JS` |
+| Meeting scheduler modal (reused on Company / Person / Calendar pages) | `hub/meetings.py` |
+| Company detail (`/companies/{id}`) | `hub/company_detail.py` |
+| People (`/people`, `/people/{id}`) | `hub/people.py` |
+| Ticket pages | `hub/tickets.py` |
+| Settings page | `hub/settings.py` |
+| PI patient rolodex (`/patients`) | `hub/pi_cases.py` |
+| Law firm ROI (`/firms`) | `hub/pi_cases.py` → `_firms_page` |
+| Collections / settlements | `hub/billing.py` |
+| Gmail thread view | `hub/comms.py` |
+| Guerilla desktop sub-pages | `hub/guerilla_pages.py` |
+| Venue create/update (forward + reverse sync) | `hub/guerilla_api.py`, `modal_outreach_hub.py` (`_mirror_to_legacy_venue`) |
+| FastAPI routes, OAuth, Baserow proxy, session store | `modal_outreach_hub.py` |
+
+### Import conventions
+
+- New code should import **from the specific module** (`from .constants import T_COMPANIES`, `from .meetings import meeting_modal_html`) — easier to trace, keeps deps explicit.
+- `hub/shared.py` is a thin facade that re-exports every public name; existing callers keep working unchanged.
+- Dependency direction inside infrastructure (no cycles): `constants` → `access` / `styles` / `compose` → `nav` → `shells`. Feature pages depend on `shared` (or specific modules) but not on each other.
+
+### Pattern for adding a new hub
+
+1. Create tables (new DB if the domain is distinct) — use `execution/setup_tickets_tables.py` or `execution/setup_crm_tables.py` as a template (JWT auth via `BASEROW_EMAIL` / `BASEROW_PASSWORD`, workspace ID 133).
+2. Add table IDs to `hub/constants.py` and re-export via `hub/shared.py`.
+3. Add the hub key to `ALL_HUB_KEYS` in `hub/access.py`.
+4. Add the hub key as a `value` on the T_STAFF `Allowed Hubs` multi-select field (Baserow field PATCH).
+5. Write the page module in `hub/<name>.py`.
+6. Register routes in `modal_outreach_hub.py`, gated by `_has_hub_access(user, '<key>')`.
+7. Add a nav entry in `hub/nav.py` + `GROUP_MAP` entry for active-highlighting.
+8. Optionally wire a KPI tile / quick link in `hub/dashboard.py` `_build_hub_body`.
 
 ---
 
@@ -124,8 +291,8 @@ A password-protected web CRM hosted at `hub.reformchiropractic.app` (Modal + Clo
 
 ```css
 /* Dark theme (default) */
---bg: #0d1b2a;        /* page background */
---bg2: #0a1628;       /* sidebar */
+--bg: #0d1b2a;          /* page background */
+--bg2: #0a1628;         /* sidebar */
 --border: #1e3a5f;
 --hdr-grad: linear-gradient(135deg, #0f3460, #16213e);
 
@@ -143,129 +310,41 @@ In Discussion: #d97706
 Active:        #059669
 
 /* Alert dots */
-Overdue: #ef4444
-Today:   #f59e0b
+Overdue:  #ef4444
+Today:    #f59e0b
 Upcoming: #10b981
 ```
 
-Light theme support is built in via `[data-theme="light"]` CSS variables and a toggle button.
-
----
-
-## Code Structure
-
-The hub is split into a thin **entry point** (`modal_outreach_hub.py`) that wires up Modal + FastAPI, and a **`hub/` package** of themed modules that render pages. Each module owns a slice of the UI so you can edit one area without touching everything else.
-
-```
-execution/
-├── modal_outreach_hub.py         ← Modal app, FastAPI routes, auth, Baserow proxy
-└── hub/
-    ├── __init__.py               ← empty package marker
-    │
-    │   ── Infrastructure (the old shared.py, now split) ──
-    ├── shared.py                 ← thin facade — re-exports everything below for back-compat
-    ├── constants.py              ← table IDs (T_*) + _TEMPLATES_JS email bodies
-    ├── access.py                 ← role lookup, hub allowlist, admin checks (5-min staff cache)
-    ├── styles.py                 ← _CSS (desktop + mobile + light/dark) + _JS_SHARED template
-    ├── nav.py                    ← _topnav — desktop top nav + hamburger drawer
-    ├── compose.py                ← _COMPOSE_HTML / _COMPOSE_JS — email FAB overlay
-    ├── shells.py                 ← _page / _forbidden_page / _mobile_page / _tool_page
-    │
-    │   ── Feature pages ──
-    ├── dashboard.py              ← _login_page, _hub_page (Command Center), _calendar_page, _coming_soon_page
-    ├── outreach.py               ← _directory_page, _map_page (shared across attorney/gorilla/community)
-    ├── pi_cases.py               ← _patients_page (rolodex + detail modal), _firms_page
-    ├── billing.py                ← _billing_page (collections + settlements)
-    ├── comms.py                  ← _contacts_page, _communications_email_page
-    ├── events.py                 ← _event_detail_page, _lead_form_page (public), _leads_dashboard_page
-    ├── social.py                 ← _social_poster_hub_page, _social_schedule_page
-    │
-    │   ── Guerilla area ──
-    ├── guerilla.py                ← GFR form helpers (_gfr_*) + form JS for field reps
-    ├── guerilla_map.py           ← _gorilla_map_page (desktop map)
-    ├── guerilla_pages.py         ← log, events internal/external, businesses, boxes, routes list + builder
-    ├── route_planner.py          ← _route_planner_page (unified cross-tool map), _outreach_list_page
-    │
-    │   ── Mobile /m/* ──
-    └── mobile.py                 ← _mobile_home_page, _mobile_log_page, _mobile_route_page, _mobile_recent_page, _mobile_map_page
-```
-
-### Editing map — "where does X live?"
-
-| Want to change… | Edit this file |
-|---|---|
-| CSS (colors, spacing, responsive breakpoints) | `hub/styles.py` → `_CSS` |
-| Shared JS helpers (`fetchAll`, `sv`, `esc`, `fmt`, `daysUntil`, `stampRefresh`) | `hub/styles.py` → `_JS_SHARED` |
-| Top nav dropdowns / items / ordering | `hub/nav.py` → `_topnav` |
-| Hamburger drawer (mobile-width desktop) | `hub/nav.py` → `_topnav` (`drawer_links` block) |
-| Compose email overlay HTML/JS | `hub/compose.py` |
-| Page shell (head, theme toggle, scripts) | `hub/shells.py` → `_page` |
-| 403 page | `hub/shells.py` → `_forbidden_page` |
-| Mobile `/m/*` page shell + bottom nav | `hub/shells.py` → `_mobile_page` |
-| Attorney/Guerilla/Community dashboard template | `hub/shells.py` → `_tool_page` |
-| Role/hub access rules | `hub/access.py` (`_is_admin`, `_get_allowed_hubs`, `ALL_HUB_KEYS`) |
-| Baserow table IDs | `hub/constants.py` |
-| Email outreach templates (PI / gorilla / community) | `hub/constants.py` → `_TEMPLATES_JS` |
-| Command Center (`/`) | `hub/dashboard.py` → `_hub_page` |
-| Login page | `hub/dashboard.py` → `_login_page` |
-| Patient rolodex + detail modal (`/patients`) | `hub/pi_cases.py` → `_patients_page` |
-| Law firm ROI (`/firms`) | `hub/pi_cases.py` → `_firms_page` |
-| Collections / settlements (`/billing/*`) | `hub/billing.py` → `_billing_page` |
-| Contact directory / Gmail thread view | `hub/comms.py` |
-| Directory page (Contact List) for any outreach tool | `hub/outreach.py` → `_directory_page` |
-| Map pages (attorney/gorilla/community desktop) | `hub/outreach.py` → `_map_page` |
-| Guerilla desktop sub-pages (log, events, businesses, boxes) | `hub/guerilla_pages.py` |
-| Guerilla desktop map | `hub/guerilla_map.py` |
-| Route builder / planner (`/outreach/planner`, `/guerilla/routes/new`) | `hub/route_planner.py`, `hub/guerilla_pages.py` |
-| GFR field-report forms (shared HTML helpers) | `hub/guerilla.py` |
-| Any mobile `/m/*` page | `hub/mobile.py` |
-| Event detail / public lead form / leads dashboard | `hub/events.py` |
-| Social poster / scheduler | `hub/social.py` |
-| FastAPI routes, OAuth, Baserow proxy, session store | `modal_outreach_hub.py` |
-
-### Import conventions
-
-- New code should import **from the specific module** (`from .nav import _topnav`, `from .constants import T_ATT_VENUES`) — it's easier to trace and keeps module dependencies explicit.
-- `hub/shared.py` is a **thin facade** that re-exports every public name from the infrastructure modules. Existing callers (`from .shared import _page, T_PI_FINANCE, ...`) keep working unchanged — don't rewrite them just to rewrite them. Only touch import lines when you're editing that file for another reason.
-- Dependency direction inside the infrastructure layer (no cycles): `constants` → `access` / `styles` / `compose` (leaves) → `nav` (uses access) → `shells` (uses all of the above). Feature pages depend on `shared` (or any specific module) but not on each other.
-
-### `_JS_SHARED` — helpers embedded in every page
-
-These are injected into every `_page()` and `_mobile_page()` render via `_JS_SHARED.format(br=..., bt=...)`. Available to all page-specific scripts:
-
-- `fetchAll(tid)` — paginated Baserow fetch (200 rows/page), retries twice
-- `sv(f)` — extract the `.value` from a Baserow single_select field (falls through for plain strings)
-- `daysUntil(ds)` — integer days from today (negative = overdue)
-- `fmt(ds)` — format `YYYY-MM-DD` → `Mon D`
-- `esc(s)` — HTML-escape for safe innerHTML
-- `stampRefresh()` — update the "Updated X:XX" timestamp in `#refresh-stamp`
+Light theme via `[data-theme="light"]` CSS variables + a toggle in the top nav.
 
 ---
 
 ## Auth
 
-Google Workspace OAuth 2.0. Only accounts from `ALLOWED_DOMAIN` (e.g. `reformchiropractic.com`) can log in.
+Google Workspace OAuth 2.0. Only accounts from `ALLOWED_DOMAIN` (`reformchiropractic.com`) can log in.
 
-**Flow:** `/login` → "Sign in with Google" → `/auth/google` → Google consent → `/auth/google/callback` → session cookie set → `/`
+**Flow:** `/login` → Google consent → `/auth/google/callback` → session cookie → `/`.
 
-**Session storage:** Modal Dict `hub-sessions` (keyed by random session ID stored in `hub_session` cookie, HttpOnly, 7-day expiry, `samesite=lax`).
+**Session storage:** Modal Dict `hub-sessions`, keyed by random session ID in `hub_session` cookie (HttpOnly, 7-day, `samesite=lax`).
 
-**CSRF protection:** Modal Dict `hub-oauth-states` stores state token with 5-minute TTL.
+**CSRF:** Modal Dict `hub-oauth-states` with 5-minute TTL.
 
 **Token refresh:** Access tokens refresh automatically on each page load if within 60s of expiry.
 
-**Gmail scopes:** `gmail.send` + `gmail.readonly` — enables compose from hub + thread view per contact.
+**OAuth scopes:** `openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events`.
+
+> If you upgrade calendar scope from `.readonly` to `.events` (already done), existing users must sign out and back in once to grant the new permission.
 
 ### Modal Secrets Required
 
 ```bash
 modal secret create outreach-hub-secrets \
-  GOOGLE_CLIENT_ID=<from GCP — use HUB_CLIENT_ID from .env> \
-  GOOGLE_CLIENT_SECRET=<from GCP — use HUB_CLIENT_SECRET from .env> \
+  GOOGLE_CLIENT_ID=<HUB_CLIENT_ID from .env> \
+  GOOGLE_CLIENT_SECRET=<HUB_CLIENT_SECRET from .env> \
   ALLOWED_DOMAIN=reformchiropractic.com \
   BASEROW_URL=https://baserow.reformchiropractic.app \
-  BASEROW_API_TOKEN=<token — use BASEROW_API_TOKEN from .env> \
-  GOOGLE_MAPS_API_KEY=<use GOOGLE_MAPS_API_KEY from .env> \
+  BASEROW_API_TOKEN=<BASEROW_API_TOKEN from .env> \
+  GOOGLE_MAPS_API_KEY=<GOOGLE_MAPS_API_KEY from .env> \
   --force
 ```
 
@@ -278,30 +357,43 @@ modal secret create outreach-hub-secrets \
 | `BASEROW_URL` | `BASEROW_URL` |
 | `BASEROW_API_TOKEN` | `BASEROW_API_TOKEN` |
 | `GOOGLE_MAPS_API_KEY` | `GOOGLE_MAPS_API_KEY` |
-| `GOOGLE_CALENDAR_EMBED_URL` | `GOOGLE_CALENDAR_EMBED_URL` |
 
-**To regenerate from .env (bash):**
-```bash
-set -a; source .env; set +a
-modal secret create outreach-hub-secrets \
-  GOOGLE_CLIENT_ID="$HUB_CLIENT_ID" \
-  GOOGLE_CLIENT_SECRET="$HUB_CLIENT_SECRET" \
-  ALLOWED_DOMAIN="$HUB_ALLOWED_DOMAIN" \
-  BASEROW_URL="$BASEROW_URL" \
-  BASEROW_API_TOKEN="$BASEROW_API_TOKEN" \
-  GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY" \
-  GOOGLE_CALENDAR_EMBED_URL="$GOOGLE_CALENDAR_EMBED_URL" \
-  --force
-```
+> `GOOGLE_CALENDAR_EMBED_URL` / `CALENDAR_ID` are no longer consulted — the calendar reads each user's `primary` calendar, writes to `primary` too. A `?calendar_id=X` query override is supported in `/api/calendar/events` if you ever want a shared-calendar view.
 
 ### Google Cloud Console Setup (one-time)
-1. Enable Gmail API
-2. OAuth Consent Screen → User Type: **Internal**
-   - Scopes: `email`, `profile`, `openid`, `gmail.send`, `gmail.readonly`
-3. OAuth 2.0 Client ID → Web application
+1. Enable Gmail API + Calendar API.
+2. OAuth Consent Screen → User Type: **Internal**.
+3. OAuth 2.0 Client ID → Web application.
    - Authorized redirect URIs:
      - `https://hub.reformchiropractic.app/auth/google/callback`
      - `http://localhost:8000/auth/google/callback`
+
+### ClickUp Integration (already configured)
+
+Modal secret `clickup-api` contains `CLICKUP_API_KEY`. Optional env var `CLICKUP_DEFAULT_LIST_ID` sets a fallback list for `+ Add task` modals; users pick a list per-task via the list dropdown (persisted in browser localStorage).
+
+### Twilio SMS Setup (pending — endpoints deployed, secret TBD)
+
+SMS send + inbound webhook are wired at `/api/sms/send`, `/api/sms/webhook`, `/api/sms/thread`. Until the Twilio secret is attached, every endpoint returns 503 with a friendly hint and the UI shows a "not configured" banner in the Send SMS modal.
+
+When you're ready to go live:
+
+1. Create a Twilio account + provision a phone number.
+2. Create the Modal secret:
+   ```bash
+   modal secret create twilio-api \
+     TWILIO_ACCOUNT_SID=AC... \
+     TWILIO_AUTH_TOKEN=... \
+     TWILIO_FROM_NUMBER=+18325551234
+   ```
+3. Attach it to the hub app by adding `modal.Secret.from_name("twilio-api")` to the `secrets=[...]` list on the `@app.function` decorator in `execution/modal_outreach_hub.py` (`bunny-secrets` / `clickup-api` neighbors).
+4. Redeploy: `$env:PYTHONUTF8="1"; modal deploy execution/modal_outreach_hub.py`.
+5. In the Twilio console, configure the phone number's **A MESSAGE COMES IN** webhook:
+   - URL: `https://hub.reformchiropractic.app/api/sms/webhook`
+   - Method: `HTTP POST`
+6. (Optional) For local testing without signature verification, set `TWILIO_SKIP_SIGNATURE=1` in the secret.
+
+**Schema:** `T_SMS_MESSAGES=823` in DB 197 (CRM). Fields: Phone (primary), Direction, Body, Status, Twilio SID, From, Author, Error, Lead ID, Company link_row, Contact link_row, Created, Updated. Inbound webhook auto-links to any existing Company / Contact / Lead by phone suffix match (last 10 digits).
 
 ---
 
@@ -327,26 +419,11 @@ Requires `fastapi[standard]`, `python-multipart`, `uvicorn`, `python-dotenv`.
 
 ---
 
-## Initial Setup (one-time, already done)
+## Cloudflare Worker proxy (already configured)
 
-### Modal secret
-See **Auth** section above for the full `modal secret create` command with Google OAuth keys.
+Modal's custom domain requires a paid plan; a Cloudflare Worker proxies instead.
 
-To rotate Baserow token (no redeploy needed):
-```bash
-modal secret create outreach-hub-secrets \
-  GOOGLE_CLIENT_ID=<existing> \
-  GOOGLE_CLIENT_SECRET=<existing> \
-  ALLOWED_DOMAIN=reformchiropractic.com \
-  BASEROW_URL=https://baserow.reformchiropractic.app \
-  BASEROW_API_TOKEN=<new_token> --force
-```
-
-### Cloudflare Worker proxy (already configured)
-
-Modal's custom domain requires a paid plan. A Cloudflare Worker proxies instead.
-
-**DNS:** `CNAME hub → reformtechops--outreach-hub-web.modal.run` (Proxied/orange cloud)
+**DNS:** `CNAME hub → reformtechops--outreach-hub-web.modal.run` (Proxied / orange cloud)
 
 **Worker name:** `hub-proxy`, route: `hub.reformchiropractic.app/*`
 
@@ -366,62 +443,44 @@ export default {
 };
 ```
 
-Note: `redirect: "follow"` is required — `redirect: "manual"` drops `Set-Cookie` headers from opaque redirects, breaking auth.
+> `redirect: "follow"` is required — `redirect: "manual"` drops `Set-Cookie` headers from opaque redirects, breaking auth.
 
 ---
 
-## CRM Roadmap (Upcoming Pages)
+## Field-rep site (separate surface)
 
-These routes exist as "Coming Soon" stubs and are next to be built out:
-
-| Route | Goal |
-|-------|------|
-| `/contacts` | Unified contact directory across all outreach tools |
-| `/social` | Social media content calendar + post management |
-| `/social/history` | Historical post performance and archive |
-| `/calendar` | Unified follow-up calendar across all tools |
-
-Other potential additions as the CRM matures:
-- Per-record detail pages (patient detail, law firm detail, venue detail)
-- Write-back to Baserow (log activities, update follow-up dates directly from hub)
-- Notifications / alerts via Slack
-- Reporting / exports
+Field reps no longer live inside this hub. Mobile `/m/*` routes were removed; field reps access their tooling via `routes.reformchiropractic.app` (a separate Coolify-hosted site that reads the guerilla venue / route / stop tables directly). If a rep is added to `Allowed Hubs` on T_STAFF they can also see a stripped-back version of the hub dashboard. Testing the rep-only view is done via the view-mode toggle on `/settings`.
 
 ---
 
 ## Troubleshooting
 
 **Dashboard shows "—" everywhere / no data loads**
-- Check browser console for fetch errors
-- Verify `BASEROW_API_TOKEN` in Modal secret is correct
-- Confirm Baserow is accessible
+- Check browser console for fetch errors.
+- Verify `BASEROW_API_TOKEN` in Modal secret is correct.
+- Confirm Baserow is accessible.
 
-**Login loop (password accepted but keeps redirecting)**
-- Verify `HUB_PASSWORD` secret is set in Modal
-- Clear browser cookies for the domain
+**Login loop / login rejected**
+- Verify `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` match the current GCP OAuth client.
+- Clear browser cookies for the domain.
+
+**Calendar page: "Calendar access expired"**
+- Scope upgraded from `calendar.readonly` → `calendar.events`. Sign out and back in once to re-consent.
 
 **All pages show 0 results / data not loading**
-- Most likely cause: `BASEROW_API_TOKEN` missing or expired in `outreach-hub-secrets`
-- Also happens if the secret was recreated with `--force` and some keys were omitted
-- Fix: regenerate the secret from `.env` using the full command in "Modal Secrets Required" above, then redeploy
-- Data cache TTL is 120s — after fix, data reappears within 2 minutes
+- Most likely: `BASEROW_API_TOKEN` missing or expired in `outreach-hub-secrets`. Regenerate the secret from `.env` using the full command above, then redeploy. Data cache TTL is 120s — after fix, data reappears within 2 minutes.
 
 **"Google Maps API key not configured" on map pages**
-- `GOOGLE_MAPS_API_KEY` not in `outreach-hub-secrets` Modal secret
-- Fix: recreate the secret with `GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"` included (see key mapping above)
+- `GOOGLE_MAPS_API_KEY` not in `outreach-hub-secrets`. Recreate secret with `GOOGLE_MAPS_API_KEY` included.
 
 **401 errors on Baserow fetch**
-- `modal secret update outreach-hub-secrets BASEROW_API_TOKEN=<new_token>`
+- `modal secret update outreach-hub-secrets BASEROW_API_TOKEN=<new_token>` (or recreate — Modal secrets don't support per-key update).
 
 **Table IDs changed**
-- Update `T_*` constants at top of `execution/modal_outreach_hub.py`
-- Redeploy
+- Update `T_*` constants in `hub/constants.py`; redeploy.
 
 **Unicode error on deploy (Windows)**
-- Always use `$env:PYTHONUTF8="1"` before `modal deploy`
+- Always use `$env:PYTHONUTF8="1"` before `modal deploy`.
 
 **`UnicodeEncodeError: surrogates not allowed` at runtime (500 on page load)**
-- Caused by using surrogate pair escape sequences (e.g. `\ud83d\udccd`) for emoji inside Python f-strings
-- Python 3 on Linux (Modal's runtime) rejects surrogates when Starlette encodes the HTML response to UTF-8
-- Fix: use full Unicode scalar values instead — e.g. `\U0001f4cd` (📍) and `\U0001f310` (🌐)
-- Rule: any emoji above U+FFFF must use `\U0001xxxx` (8-digit) form, never the surrogate pair form
+- Using surrogate-pair escapes for emoji inside Python strings. Use full Unicode scalar values instead — e.g. `\U0001f4cd` (📍), `\U0001f310` (🌐). Any emoji above U+FFFF must use the 8-digit form.

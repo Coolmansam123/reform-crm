@@ -21,7 +21,8 @@ def _has_social_access(user: dict) -> bool:
 _staff_cache = {"data": None, "ts": 0}
 
 ALL_HUB_KEYS = ["attorney", "guerilla", "community", "pi_cases", "billing",
-                "communications", "social", "calendar"]
+                "communications", "social", "calendar", "tickets",
+                "leads", "tasks", "inbox", "sequences"]
 
 
 def _get_staff_record(user: dict) -> dict:
@@ -87,14 +88,35 @@ def _is_admin(user: dict) -> bool:
     return _get_staff_role(user) == "admin"
 
 
-def _get_allowed_hubs(user: dict) -> list:
-    """Return list of hub keys user can access. Admin gets all."""
+def _get_real_allowed_hubs(user: dict) -> list:
+    """Return the user's actual hub permissions, ignoring any session view-as override.
+    Use this when rendering the settings page so the real state is visible."""
     role = _get_staff_role(user)
     if role == "admin":
         return list(ALL_HUB_KEYS)
     record = _get_staff_record(user)
     hubs_field = record.get("Allowed Hubs") or []
     return [h["value"] if isinstance(h, dict) else str(h) for h in hubs_field]
+
+
+def _can_view_as(user: dict) -> bool:
+    """Whether this user is allowed to override their view mode for testing.
+    Gated by VIEW_AS_EMAILS env var (comma-separated). Default: nobody."""
+    allowed = os.environ.get("VIEW_AS_EMAILS", "")
+    if not allowed:
+        return False
+    emails = [e.strip().lower() for e in allowed.split(",") if e.strip()]
+    return (user.get("email") or "").lower() in emails
+
+
+def _get_allowed_hubs(user: dict) -> list:
+    """Return list of hub keys the user's current session can access.
+    Honors a session `view_as_hubs` override when the user is permitted
+    by `_can_view_as` — used by the testing toggle on /settings."""
+    override = user.get("view_as_hubs") if isinstance(user, dict) else None
+    if override is not None and _can_view_as(user):
+        return list(override)
+    return _get_real_allowed_hubs(user)
 
 
 def _has_hub_access(user: dict, hub_key: str) -> bool:

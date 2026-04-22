@@ -26,6 +26,34 @@ T_STAFF  = 815
 T_EVENTS = 816
 T_LEADS  = 817
 
+# ─── Tickets (Helpdesk) — 'Operations Hub' database (206) ─────────────────────
+T_TICKETS         = 818
+T_TICKET_COMMENTS = 819
+
+# ─── CRM (Companies + Contacts + Activities) — 'Reform Chiropractic CRM' (197) ─
+# Superset tables created 2026-04-21 by setup_crm_tables.py + populated by
+# migrate_venues_to_companies.py. Phase 2b swaps hubs to read/write these
+# instead of the legacy T_ATT_VENUES / T_GOR_VENUES / T_COM_VENUES tables.
+# T_ACTIVITIES unifies the three legacy activity tables (T_*_ACTS) — link_row
+# to Company (+ optional Contact for the person on the other end).
+T_COMPANIES            = 820
+T_CONTACTS             = 821
+T_ACTIVITIES           = 822
+T_SMS_MESSAGES         = 823
+T_SEQUENCES            = 824
+T_SEQUENCE_ENROLLMENTS = 825
+T_SOCIAL_NOTIFICATIONS = 826
+
+
+# ─── Leads follow-up pipeline ─────────────────────────────────────────────────
+# Extends the existing T_LEADS (817, in Gorilla Marketing DB 203). Populated
+# initially by the public lead-capture forms (hub/events.py); the hub now
+# surfaces those rows as a full follow-up pipeline via hub/leads.py.
+LEAD_STAGES = ["New", "Contacted", "Appointment Scheduled",
+               "Seen", "Converted", "Dropped"]
+OPEN_LEAD_STAGES   = {"New", "Contacted", "Appointment Scheduled", "Seen"}
+CLOSED_LEAD_STAGES = {"Converted", "Dropped"}
+
 
 # ── Email outreach templates (plain string — no f-string so braces don't need doubling) ──
 # NOTE: _TEMPLATES is already declared as `var` in compose.py (_COMPOSE_JS).

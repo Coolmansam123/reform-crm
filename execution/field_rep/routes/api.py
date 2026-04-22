@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 
 from hub import guerilla_api
 from hub.constants import (
-    T_GOR_BOXES, T_GOR_ROUTES, T_GOR_ROUTE_STOPS, T_GOR_VENUES,
+    T_EVENTS, T_GOR_BOXES, T_GOR_ROUTES, T_GOR_ROUTE_STOPS, T_GOR_VENUES, T_LEADS,
 )
 
 from .. import storage
@@ -102,6 +102,26 @@ async def guerilla_log(request: Request):
                                            bunny_zone=bzone, bunny_key=bkey,
                                            bunny_cdn_base=bcdn)
     return resp
+
+
+# ─── Lead capture (field-rep form) ───────────────────────────────────────────
+# Field reps submit the Capture Lead form to this endpoint. Creates a T_LEADS
+# row; on success, the mobile UI closes the form. The hub has an analogous
+# endpoint that also fires `new_lead` automations — this field-rep version
+# skips trigger firing because automations run on the Modal hub, which we
+# don't have a direct handle to from here. If/when that matters, wire a
+# cross-app HTTP call here.
+@router.post("/api/leads/capture")
+async def capture_lead(request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"ok": False, "error": "unauthenticated"}, status_code=401)
+    br, bt = _env()
+    return await guerilla_api.capture_lead(
+        request, br, bt, session,
+        cached_rows=_cached_rows,
+        invalidate=_invalidate,
+    )
 
 
 # ─── Massage box CRUD ────────────────────────────────────────────────────────

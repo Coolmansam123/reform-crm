@@ -13,35 +13,37 @@ The desktop overlay modal (HTML + render) is not in this file yet — Step 3
 of the refactor will extract it from outreach.py once Step 2 confirms the
 CRUD actions work end-to-end via the directory page.
 """
-from .constants import (
-    T_ATT_VENUES, T_ATT_ACTS,
-    T_GOR_VENUES, T_GOR_ACTS,
-    T_COM_VENUES, T_COM_ACTS,
-)
+from .constants import T_COMPANIES, T_ACTIVITIES
 
 
 # JS block — inject into any page that needs the Contact.* actions.
 # Format placeholders are filled in by contact_actions_js() below.
+#
+# Phase 2b.2 (2026-04-21): all three tools now read/write T_COMPANIES (unified)
+# and the single T_ACTIVITIES table. The per-tool `cfg` only differs in display
+# labels + status options. All field names are unified: Name/Phone/Address.
 _CONTACT_ACTIONS_JS = r"""
 /* ── Contact detail — shared CRUD actions ──────────────────────────── */
+const _COMPANIES_TID = {companies};
+const _ACTIVITIES_TID = {activities};
 const _CONTACT_TOOL_CFG = {{
   attorney: {{
-    venuesTid: {att_venues}, actsTid: {att_acts},
-    actsLinkField: 'Law Firm',
-    nameField: 'Law Firm Name', phoneField: 'Phone Number', addrField: 'Law Office Address',
-    activeStatus: 'Active Relationship',
-    stages: ['Not Contacted', 'Contacted', 'In Discussion', 'Active Relationship'],
+    venuesTid: {companies}, actsTid: {activities},
+    actsLinkField: 'Company',
+    nameField: 'Name', phoneField: 'Phone', addrField: 'Address',
+    activeStatus: 'Active Partner',
+    stages: ['Not Contacted', 'Contacted', 'In Discussion', 'Active Partner'],
   }},
   gorilla: {{
-    venuesTid: {gor_venues}, actsTid: {gor_acts},
-    actsLinkField: 'Business',
+    venuesTid: {companies}, actsTid: {activities},
+    actsLinkField: 'Company',
     nameField: 'Name', phoneField: 'Phone', addrField: 'Address',
     activeStatus: 'Active Partner',
     stages: ['Not Contacted', 'Contacted', 'In Discussion', 'Active Partner'],
   }},
   community: {{
-    venuesTid: {com_venues}, actsTid: {com_acts},
-    actsLinkField: 'Organization',
+    venuesTid: {companies}, actsTid: {activities},
+    actsLinkField: 'Company',
     nameField: 'Name', phoneField: 'Phone', addrField: 'Address',
     activeStatus: 'Active Partner',
     stages: ['Not Contacted', 'Contacted', 'In Discussion', 'Active Partner'],
@@ -105,7 +107,7 @@ window.Contact = {{
 
   saveStatus: async function(tool, venueId, newStatus) {{
     var cfg = _CONTACT_TOOL_CFG[tool];
-    var r = await Contact.bpatch(cfg.venuesTid, venueId, {{'Contact Status': {{value: newStatus}}}});
+    var r = await Contact.bpatch(cfg.venuesTid, venueId, {{'Contact Status': newStatus}});
     return {{ok: r.ok}};
   }},
 
@@ -131,21 +133,42 @@ window.Contact = {{
 
   /* Log a new activity row.
      fields: {{date?, type?, outcome?, person?, summary?, followUp?}}.
-     Unspecified fields default sensibly (date = today, empty strings/null). */
+     Unspecified fields default sensibly (date = today, empty strings/null).
+     `venueId` is a Company row id (unified schema post-Phase-2b.2). */
   logActivity: async function(tool, venueId, fields) {{
-    var cfg = _CONTACT_TOOL_CFG[tool];
     var payload = {{}};
-    payload[cfg.actsLinkField] = [venueId];
+    payload['Company']         = [venueId];
     payload['Date']            = fields.date || Contact.today();
-    payload['Type']            = fields.type ? {{value: fields.type}} : null;
-    payload['Outcome']         = fields.outcome ? {{value: fields.outcome}} : null;
+    payload['Type']            = fields.type || null;
+    payload['Outcome']         = fields.outcome || null;
     payload['Contact Person']  = fields.person || '';
     payload['Summary']         = fields.summary || '';
     payload['Follow-Up Date']  = fields.followUp || null;
-    var r = await Contact.bpost(cfg.actsTid, payload);
+    payload['Created']         = new Date().toISOString();
+    var r = await Contact.bpost(_ACTIVITIES_TID, payload);
     if (!r.ok) return {{ok: false}};
     var row = await r.json();
     return {{ok: true, row: row}};
+  }},
+
+  /* Fetch all activities for a given Company id.
+     Uses Baserow's filter params to pull just this Company's rows. */
+  fetchActivities: async function(companyId) {{
+    var url = BR + '/api/database/rows/table/' + _ACTIVITIES_TID
+      + '/?user_field_names=true&size=200&order_by=-Date,-id'
+      + '&filter__field_Company__link_row_has=' + encodeURIComponent(companyId);
+    // link_row_has uses field id not name, so fall back to client-side filter
+    url = BR + '/api/database/rows/table/' + _ACTIVITIES_TID
+      + '/?user_field_names=true&size=200&order_by=-Date,-id';
+    var r = await fetch(url, {{headers: {{'Authorization': 'Token ' + BT}}}});
+    if (!r.ok) return [];
+    var data = await r.json();
+    return (data.results || []).filter(function(a) {{
+      var links = a.Company || [];
+      return links.some(function(l) {{
+        return (l && (l.id === companyId || l.id === +companyId));
+      }});
+    }});
   }},
 }};
 """
@@ -153,14 +176,9 @@ window.Contact = {{
 
 def contact_actions_js() -> str:
     """Return the Contact.* CRUD actions JS block, ready to inject into a page.
-
-    Produces a plain-JS string (not an f-string / format template) — callers
-    can splice it into their JS block directly without further escaping.
-    """
+    All tools now share the unified T_COMPANIES and T_ACTIVITIES tables."""
     return _CONTACT_ACTIONS_JS.format(
-        att_venues=T_ATT_VENUES, att_acts=T_ATT_ACTS,
-        gor_venues=T_GOR_VENUES, gor_acts=T_GOR_ACTS,
-        com_venues=T_COM_VENUES, com_acts=T_COM_ACTS,
+        companies=T_COMPANIES, activities=T_ACTIVITIES,
     )
 
 
@@ -174,6 +192,7 @@ _CONTACT_DETAIL_HTML_TEMPLATE = (
     '<div style="flex:1;min-width:0"><div class="cd-title" id="cd-title"></div>'
     '<div id="cd-subtitle" style="margin-top:4px"></div></div>'
     '<div class="cd-header-actions">'
+    '<a class="cd-btn-email" id="cd-btn-open" href="#" onclick="return openFullProfile()" title="Open full company profile">\u2197 Open full profile</a>'
     '<button class="cd-btn-email" onclick="showEmailTemplates(_cdVenue,\'{tool_key}\')" title="Email templates">\u2709 Email</button>'
     '<button class="cd-btn-close" onclick="closeContactDetail()">&times;</button>'
     '</div></div>'
@@ -311,6 +330,16 @@ function closeContactDetail() {
   document.getElementById('cd-overlay').classList.remove('open');
   document.body.style.overflow = '';
   _cdVenue = null;
+}
+
+function openFullProfile() {
+  // Modal is lightweight — navigate to the full /companies/{id} page for
+  // inline editing, Activity + History tabs, linked People, Log Lead, and
+  // Schedule Meeting. _cdVenue is a T_COMPANIES row, so .id maps directly.
+  if (_cdVenue && _cdVenue.id) {
+    window.location.href = '/companies/' + _cdVenue.id;
+  }
+  return false;
 }
 
 function showEmailTemplates(v, category) {

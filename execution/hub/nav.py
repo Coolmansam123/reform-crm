@@ -16,13 +16,20 @@ def _topnav(active: str, user: dict = None) -> str:
         'outreach_contacts': 'outreach',
         'attorney_dir': 'outreach', 'gorilla_dir': 'outreach', 'community_dir': 'outreach',
         'gorilla_log': 'outreach', 'gorilla_events_int': 'outreach', 'gorilla_events_ext': 'outreach',
-        'gorilla_businesses': 'outreach', 'gorilla_boxes': 'outreach', 'gorilla_routes': 'outreach', 'leads': 'outreach',
+        'gorilla_businesses': 'outreach', 'gorilla_boxes': 'outreach', 'gorilla_routes': 'outreach',
+        'leads_by_event': 'outreach', 'leads': 'leads', 'lead': 'leads',
         'patients': 'pi_cases', 'patients_active': 'pi_cases', 'patients_billed': 'pi_cases',
         'patients_awaiting': 'pi_cases', 'patients_closed': 'pi_cases', 'firms': 'pi_cases',
         'billing_collections': 'billing', 'billing_settlements': 'billing',
         'contacts': 'communications', 'communications_email': 'communications',
-        'social': 'social', 'social_history': 'social', 'social_poster': 'social',
+        'people': 'communications',
+        'social': 'social', 'social_history': 'social', 'social_inbox': 'social',
         'calendar': 'calendar',
+        'tickets':   'tickets',
+        'tasks':     'tasks',
+        'inbox':     'inbox',
+        'sequences': 'sequences',
+        'reports':   'reports',
     }
     top_group = GROUP_MAP.get(active, '')
 
@@ -56,7 +63,7 @@ def _topnav(active: str, user: dict = None) -> str:
         hub_links += grp_link('gorilla', 'Guerilla Mktg', '/guerilla')
         if admin:
             hub_links += drop_link('gorilla_events_int', 'Internal Events', '/guerilla/events/internal')
-            hub_links += drop_link('leads', 'Lead Capture', '/leads')
+            hub_links += drop_link('leads_by_event', 'Leads by Event', '/leads/by-event')
     if admin:
         hub_links += drop_link('outreach_list', 'Outreach Directory', '/outreach/list')
     if hub_links:
@@ -89,14 +96,15 @@ def _topnav(active: str, user: dict = None) -> str:
     )
 
     comms_drop = (
-        drop_link('communications_email', 'Email',    '/communications/email')
-        + drop_link('contacts',           'Contacts', '/contacts')
+        drop_link('communications_email', 'Email',     '/communications/email')
+        + drop_link('contacts',           'Companies', '/contacts')
+        + drop_link('people',             'People',    '/people')
     )
 
     social_drop = (
-        drop_link('social_poster',  'Poster Hub', '/social/poster')
-        + drop_link('social',       'Schedule',   '/social')
-        + drop_link('social_history','History',   '/social/history')
+        drop_link('social_inbox',   'Inbox',    '/social/inbox')
+        + drop_link('social',       'Monitor',  '/social')
+        + drop_link('social_history','History', '/social/history')
     )
 
     def menu(gid, label, drop_html):
@@ -124,7 +132,7 @@ def _topnav(active: str, user: dict = None) -> str:
         drawer_links += f'<a href="/guerilla" class="tnav-grp-lbl{guerilla_cls}">Guerilla Mktg</a>'
         if admin:
             drawer_links += '<a href="/guerilla/events/internal">Internal Events</a>'
-            drawer_links += '<a href="/leads">Lead Capture</a>'
+            drawer_links += '<a href="/leads/by-event">Leads by Event</a>'
     if admin:
         drawer_links += '<a href="/outreach/list">Outreach Directory</a>'
     # Routes section
@@ -148,13 +156,31 @@ def _topnav(active: str, user: dict = None) -> str:
             '<a href="/billing/settlements">Settlements</a>'
         )
     if admin and 'communications' in hubs:
-        drawer_links += '<a href="/communications/email">Email</a><a href="/contacts">Contacts</a>'
+        drawer_links += '<a href="/communications/email">Email</a><a href="/contacts">Companies</a><a href="/people">People</a>'
     if admin and 'social' in hubs:
-        drawer_links += '<a href="/social/poster">Social Poster</a>'
+        drawer_links += '<a href="/social/inbox">Social Inbox</a><a href="/social">Social Monitor</a>'
     if 'calendar' in hubs:
         drawer_links += '<a href="/calendar">Calendar</a>'
+    if 'inbox' in hubs:
+        inbox_cls = ' active' if active == 'inbox' else ''
+        drawer_links += f'<a href="/inbox" class="tnav-grp-lbl{inbox_cls}">Inbox</a>'
+    if 'leads' in hubs:
+        leads_cls = ' active' if active in ('leads', 'lead') else ''
+        drawer_links += f'<a href="/leads" class="tnav-grp-lbl{leads_cls}">Leads</a>'
+    if 'tasks' in hubs:
+        tasks_cls = ' active' if active == 'tasks' else ''
+        drawer_links += f'<a href="/tasks" class="tnav-grp-lbl{tasks_cls}">Tasks</a>'
+    if 'sequences' in hubs:
+        seq_cls = ' active' if active == 'sequences' else ''
+        drawer_links += f'<a href="/sequences" class="tnav-grp-lbl{seq_cls}">Automations</a>'
+    if 'tickets' in hubs:
+        tickets_cls = ' active' if active == 'tickets' else ''
+        drawer_links += f'<a href="/tickets" class="tnav-grp-lbl{tickets_cls}">Tickets</a>'
+    if admin:
+        drawer_links += '<a href="/reports">Reports</a>'
     drawer_links += (
         '<div class="tnav-sep"></div>'
+        f'<a href="/settings" class="{"active" if active == "settings" else ""}">\u2699\ufe0f Settings</a>'
         '<a href="/logout" style="color:var(--text3)">Sign Out</a>'
     )
 
@@ -184,7 +210,18 @@ def _topnav(active: str, user: dict = None) -> str:
         nav_items += menu('social', 'Social', social_drop)
     if 'calendar' in hubs:
         nav_items += nav_btn('calendar', 'Calendar', href='/calendar')
+    if 'inbox' in hubs:
+        nav_items += nav_btn('inbox', 'Inbox', href='/inbox')
+    if 'leads' in hubs:
+        nav_items += nav_btn('leads', 'Leads', href='/leads')
+    if 'tasks' in hubs:
+        nav_items += nav_btn('tasks', 'Tasks', href='/tasks')
+    if 'sequences' in hubs:
+        nav_items += nav_btn('sequences', 'Automations', href='/sequences')
+    if 'tickets' in hubs:
+        nav_items += nav_btn('tickets', 'Tickets', href='/tickets')
 
+    settings_active = ' active' if active == 'settings' else ''
     return (
         '<nav class="tnav">'
         '<a href="/" class="tnav-logo">\u2726 Reform <span>Operations Hub</span></a>'
@@ -194,6 +231,7 @@ def _topnav(active: str, user: dict = None) -> str:
         '<div class="tnav-right">'
         '<button class="tnav-theme-btn" id="theme-btn" onclick="toggleTheme()"><span id="theme-icon">\U0001f319</span></button>'
         + (f'<span class="tnav-user">{user_name}</span>' if user_name else '')
+        + f'<a href="/settings" class="tnav-settings{settings_active}" title="Settings" aria-label="Settings">\u2699\ufe0f</a>'
         + '<a href="/logout" class="tnav-signout">Sign Out</a>'
         '</div>'
         '<button class="tnav-hamburger" onclick="openDrawer()">\u2630</button>'

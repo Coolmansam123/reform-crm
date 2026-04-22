@@ -21,7 +21,11 @@ See guerilla.py .gfr-overlay and #map-sidebar for reference implementations.
 """
 
 from .access import (
+    ALL_HUB_KEYS,
+    _can_view_as,
     _get_allowed_hubs,
+    _get_real_allowed_hubs,
+    _get_staff_role,
     _has_hub_access,
     _has_social_access,
     _is_admin,
@@ -45,6 +49,18 @@ from .constants import (
     T_PI_CLOSED,
     T_PI_FINANCE,
     T_STAFF,
+    T_TICKETS,
+    T_TICKET_COMMENTS,
+    T_COMPANIES,
+    T_CONTACTS,
+    T_ACTIVITIES,
+    T_SMS_MESSAGES,
+    T_SEQUENCES,
+    T_SEQUENCE_ENROLLMENTS,
+    T_SOCIAL_NOTIFICATIONS,
+    LEAD_STAGES,
+    OPEN_LEAD_STAGES,
+    CLOSED_LEAD_STAGES,
     _TEMPLATES_JS,
 )
 from .nav import _topnav
@@ -56,8 +72,14 @@ __all__ = [
     "T_ATT_VENUES", "T_ATT_ACTS", "T_GOR_VENUES", "T_GOR_ACTS", "T_GOR_BOXES",
     "T_COM_VENUES", "T_COM_ACTS", "T_GOR_ROUTES", "T_GOR_ROUTE_STOPS",
     "T_PI_ACTIVE", "T_PI_BILLED", "T_PI_AWAITING", "T_PI_CLOSED", "T_PI_FINANCE",
-    "T_STAFF", "T_EVENTS", "T_LEADS", "_TEMPLATES_JS",
+    "T_STAFF", "T_EVENTS", "T_LEADS", "T_TICKETS", "T_TICKET_COMMENTS",
+    "T_COMPANIES", "T_CONTACTS", "T_ACTIVITIES", "T_SMS_MESSAGES",
+    "T_SEQUENCES", "T_SEQUENCE_ENROLLMENTS", "T_SOCIAL_NOTIFICATIONS",
+    "LEAD_STAGES", "OPEN_LEAD_STAGES", "CLOSED_LEAD_STAGES",
+    "_TEMPLATES_JS",
     # access
+    "ALL_HUB_KEYS", "_can_view_as", "_get_staff_role",
+    "_get_real_allowed_hubs",
     "_has_social_access", "_is_admin", "_get_allowed_hubs", "_has_hub_access",
     # styles
     "_CSS", "_JS_SHARED",
