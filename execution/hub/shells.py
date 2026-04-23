@@ -87,58 +87,76 @@ def _forbidden_page(br: str, bt: str, user: dict = None) -> str:
     return _page('', 'Access Restricted', header, body, '', br, bt, user=user)
 
 
-# ─── Mobile page shell ────────────────────────────────────────────────────────
+# ─── Mobile page shell ────────────────────────────────────────────────────────────
+def _build_mobile_drawer(active: str, user: dict) -> str:
+    """Slide-out drawer for the routes mobile app. Mirrors the hub's tnav-drawer
+    pattern but slides in from the left. Admin-only items are gated."""
+    admin = _is_admin(user)
+
+    def link(aid: str, label: str, href: str, grp: bool = False) -> str:
+        cls_parts = []
+        if grp:
+            cls_parts.append('tnav-grp-lbl')
+        if aid and aid == active:
+            cls_parts.append('active')
+        cls = f' class="{" ".join(cls_parts)}"' if cls_parts else ''
+        return f'<a href="{href}"{cls}>{label}</a>'
+
+    sep = '<div class="tnav-sep"></div>'
+    items = (
+        link('m_home',         '🏠 Dashboard',         '/',              grp=True)
+        + link('m_routes',     '🗺️ Routes',       '/routes',        grp=True)
+        + link('m_outreach',   '📞 Outreach Due',       '/outreach',      grp=True)
+        + link('m_recent',     '⏱️ Recent Activity',  '/recent',        grp=True)
+        + sep
+        + (link('m_map',       '📍 Full Venue Map',     '/map') if admin else '')
+        + link('m_outreach_map','📍 Outreach Map',      '/outreach/map')
+        + sep
+        + link('m_lead',       '📋 Capture Lead',       '/lead')
+        + link('m_directory',  '📇 All Companies',      '/directory')
+        + sep
+        + '<a href="https://hub.reformchiropractic.app">💻 Full Hub</a>'
+        '<a href="/logout" style="color:var(--text3)">Sign Out</a>'
+    )
+    return (
+        '<div class="m-drawer-backdrop" id="m-drawer-backdrop" onclick="closeMDrawer()"></div>'
+        '<div class="m-drawer" id="m-drawer">'
+        '<div class="m-drawer-hdr">'
+        '<span class="tnav-logo">✦ Reform</span>'
+        '<button class="tnav-drawer-close" onclick="closeMDrawer()">✕</button>'
+        '</div>'
+        + items
+        + '</div>'
+    )
+
+
 def _mobile_page(active: str, title: str, body_html: str, script_js: str,
                  br: str, bt: str, user: dict = None, wrap_cls: str = '',
                  extra_html: str = '', extra_js: str = '') -> str:
-    """Lightweight page shell for /m routes. Bottom nav, optional extra HTML/JS."""
+    """Page shell for the routes mobile app. Hamburger + slide-out drawer. Dark only."""
     shared = _JS_SHARED.format(br=br, bt=bt)
     user = user or {}
-
-    def bnav_btn(aid, icon, label, href):
-        cls = ' active' if aid == active else ''
-        return (f'<a href="{href}" class="mobile-bnav-btn{cls}">'
-                f'<span class="mbi">{icon}</span>{label}</a>')
-
-    admin = _is_admin(user)
-    bnav = (
-        '<nav class="mobile-bnav">'
-        + bnav_btn('m_home',   '\U0001f3e0', 'Home',   '/')
-        + (bnav_btn('m_map',   '\U0001f4cd', 'Map',    '/map') if admin else '')
-        + bnav_btn('m_routes', '\U0001f5fa\ufe0f', 'Routes', '/routes')
-        + bnav_btn('m_recent', '\u23f1\ufe0f', 'Recent', '/recent')
-        + '</nav>'
-    )
+    drawer = _build_mobile_drawer(active, user)
     wrap_class = f'mobile-wrap {wrap_cls}'.strip()
     return (
         '<!DOCTYPE html><html lang="en">'
         '<head><meta charset="UTF-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">'
-        f'<title>{title} \u2014 Reform</title>'
+        f'<title>{title} — Reform</title>'
         f'<style>{_CSS}</style>'
-        '<script>(function(){'
-        'var t=localStorage.getItem("hub-theme");'
-        'if(t==="light"){document.documentElement.setAttribute("data-theme","light");}'
-        '})()</script>'
         '</head><body>'
-        f'<div class="{wrap_class}">'
+        + drawer
+        + f'<div class="{wrap_class}">'
         + body_html
         + '</div>'
-        + bnav
         + extra_html
         + f'<script>{shared}\n{extra_js}\n{script_js}\n'
-        'function mToggleTheme(){'
-        'var d=document.documentElement;'
-        'var cur=d.getAttribute("data-theme");'
-        'var t=cur==="light"?"dark":"light";'
-        'd.setAttribute("data-theme",t==="dark"?"":"light");'
-        'var ic=document.getElementById("m-theme-icon");'
-        'if(ic)ic.textContent=t==="light"?"\\u2600\\ufe0f":"\\ud83c\\udf19";'
-        'localStorage.setItem("hub-theme",t);}'
-        '(function(){var t=localStorage.getItem("hub-theme");'
-        'var ic=document.getElementById("m-theme-icon");'
-        'if(ic)ic.textContent=t==="light"?"\\u2600\\ufe0f":"\\ud83c\\udf19";'
-        '})();'
+        'function openMDrawer(){'
+        'document.getElementById("m-drawer").classList.add("open");'
+        'document.getElementById("m-drawer-backdrop").classList.add("open");}'
+        'function closeMDrawer(){'
+        'document.getElementById("m-drawer").classList.remove("open");'
+        'document.getElementById("m-drawer-backdrop").classList.remove("open");}'
         '</script>'
         '</body></html>'
     )

@@ -9,6 +9,7 @@ from .shared import (
     T_GOR_ROUTES, T_GOR_ROUTE_STOPS,
     T_COM_VENUES, T_COM_ACTS,
     T_EVENTS, T_LEADS,
+    T_COMPANIES, T_ACTIVITIES,
 )
 from .guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
 from .contact_detail import contact_actions_js
@@ -26,42 +27,141 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
     user_name = user.get('name', '')
     body = (
         '<div class="mobile-hdr">'
-        '<div><div class="mobile-hdr-title">\u2726 Reform</div>'
+        '<div><div class="mobile-hdr-title">✦ Reform</div>'
         f'<div class="mobile-hdr-sub">{day_str}</div></div>'
-        '<div style="display:flex;align-items:center;gap:10px">'
-        '<button class="m-theme-btn" onclick="mToggleTheme()" id="m-theme-btn"><span id="m-theme-icon">\U0001f319</span></button>'
-        f'<a href="/logout" style="font-size:12px;color:var(--text3);text-decoration:none">Sign out</a>'
-        '</div>'
+        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div class="mobile-body">'
-        f'<div class="mobile-greeting"><h2>Hey, {first} \U0001f44b</h2>'
+        f'<div class="mobile-greeting"><h2>Hey, {first} 👋</h2>'
         '<div class="sub">Ready to hit the field?</div></div>'
-        '<div class="mobile-cta-grid">'
-        '<a href="/routes" class="mobile-cta mobile-cta-orange">'
-        '<span class="mobile-cta-icon">\U0001f5fa\ufe0f</span>'
-        '<div><div>My Routes</div><div class="mobile-cta-sub">View all assigned routes</div></div>'
-        '</a>'
-        '<a href="/outreach" class="mobile-cta mobile-cta-blue">'
-        '<span class="mobile-cta-icon">\U0001f4de</span>'
-        '<div><div>Outreach Due</div><div class="mobile-cta-sub">Overdue follow-ups</div></div>'
-        '</a>'
-        + ('<a href="/map" class="mobile-cta mobile-cta-green">'
-           '<span class="mobile-cta-icon">\U0001f4cd</span>'
-           '<div><div>Route Planner</div><div class="mobile-cta-sub">Full venue map</div></div>'
-           '</a>' if _is_admin(user) else '')
-        + '</div>'
-        '<div class="mobile-section-lbl">Quick Links</div>'
-        '<div class="mobile-links">'
-        '<a href="/lead" class="mobile-link">\U0001f4cb Capture Lead</a>'
-        '<a href="/recent" class="mobile-link">\u23f1\ufe0f Recent Logs</a>'
-        '<a href="/directory" class="mobile-link">\U0001f4c7 All Companies</a>'
-        '<a href="/outreach/map" class="mobile-link">\U0001f5fa\ufe0f Outreach Map</a>'
-        + ('<a href="/map" class="mobile-link">\U0001f4cd Full Venue Map</a>' if _is_admin(user) else '')
-        + '<a href="https://hub.reformchiropractic.app" class="mobile-link">\U0001f4bb Full Hub</a>'
+
+        # KPI strip (tappable)
+        '<div class="stats-row" id="m-home-stats">'
+        '<a href="/routes" class="stat-chip c-orange" style="text-decoration:none">'
+        '<div class="label">Today’s Stops</div><div class="value" id="kpi-stops">—</div></a>'
+        '<a href="/outreach" class="stat-chip c-red" style="text-decoration:none">'
+        '<div class="label">Overdue</div><div class="value" id="kpi-overdue">—</div></a>'
+        '<a href="/recent" class="stat-chip c-blue" style="text-decoration:none">'
+        '<div class="label">Leads (7d)</div><div class="value" id="kpi-leads">—</div></a>'
+        '<a href="/routes" class="stat-chip c-green" style="text-decoration:none">'
+        '<div class="label">Active Routes</div><div class="value" id="kpi-routes">—</div></a>'
+        '</div>'
+
+        # Today's Route panel
+        '<div class="panel">'
+        '<div class="panel-hd"><span class="panel-title">🗺️ Today’s Route</span>'
+        '<span class="panel-ct" id="today-ct">—</span></div>'
+        '<div class="panel-body" id="today-body"><div class="loading" style="padding:16px">Loading…</div></div>'
+        '</div>'
+
+        # Needs Attention panel
+        '<div class="panel">'
+        '<div class="panel-hd"><span class="panel-title">🔴 Needs Attention</span>'
+        '<span class="panel-ct" id="attn-ct">—</span></div>'
+        '<div class="panel-body" id="attn-body"><div class="loading" style="padding:16px">Loading…</div></div>'
+        '</div>'
+
+        # Recent Activity panel
+        '<div class="panel">'
+        '<div class="panel-hd"><span class="panel-title">⏱️ Recent Activity</span>'
+        '<span class="panel-ct" id="act-ct">—</span></div>'
+        '<div class="panel-body" id="act-body"><div class="loading" style="padding:16px">Loading…</div></div>'
         '</div>'
         '</div>'
     )
-    script_js = f"const GFR_USER={repr(user_name)};\nconst TOOL = {{venuesT: {T_GOR_VENUES}}};\n"
+    user_email = (user.get('email', '') or '').strip().lower()
+    script_js = f"""
+const GFR_USER = {repr(user_name)};
+const USER_EMAIL = {repr(user_email)};
+const TOOL = {{ venuesT: {T_GOR_VENUES} }};
+
+async function loadHomeDashboard() {{
+  const [routes, stops, acts, leads, overdueResp] = await Promise.all([
+    fetchAll({T_GOR_ROUTES}),
+    fetchAll({T_GOR_ROUTE_STOPS}),
+    fetchAll({T_ACTIVITIES}),
+    fetchAll({T_LEADS}),
+    fetch('/api/outreach/due').then(r => r.ok ? r.json() : []).catch(() => [])
+  ]);
+
+  const myRoutes = routes.filter(r => (r['Assigned To']||'').trim().toLowerCase() === USER_EMAIL);
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Today's route
+  const todayRoute = myRoutes.find(r => {{
+    const s = sv(r['Status']) || 'Draft';
+    return r['Date'] === today && (s === 'Active' || s === 'Draft');
+  }});
+  const activeRoutes = myRoutes.filter(r => {{
+    const s = sv(r['Status']) || 'Draft';
+    return s === 'Active' || s === 'Draft';
+  }}).length;
+
+  let todayStops = 0;
+  let todayBody = '<div class="empty" style="padding:16px 18px;color:var(--text3);font-size:13px">No route assigned today</div>';
+  if (todayRoute) {{
+    const ts = stops.filter(s => {{
+      const rl = s['Route']; return Array.isArray(rl) && rl.some(x => x.id === todayRoute.id);
+    }});
+    todayStops = ts.length;
+    const done = ts.filter(s => sv(s['Status']) === 'Visited' || sv(s['Status']) === 'Skipped').length;
+    const name = esc(todayRoute['Name'] || "Today's Route");
+    todayBody = `<a href="/route" style="display:block;padding:14px 18px;text-decoration:none;color:inherit">
+      <div style="font-size:15px;font-weight:700;margin-bottom:4px">${{name}}</div>
+      <div style="font-size:12px;color:var(--text3)">${{done}} of ${{ts.length}} stops done • Tap to start →</div></a>`;
+    document.getElementById('today-ct').textContent = todayStops + ' stops';
+  }} else {{
+    document.getElementById('today-ct').textContent = '';
+  }}
+  document.getElementById('today-body').innerHTML = todayBody;
+
+  // Leads in last 7 days
+  const sevenDaysAgo = new Date(Date.now() - 7*86400000).toISOString().slice(0, 10);
+  const recentLeads = leads.filter(l => {{
+    const d = (l['Created'] || l['Date'] || '').slice(0, 10);
+    return d && d >= sevenDaysAgo;
+  }}).length;
+
+  // KPI chips
+  document.getElementById('kpi-stops').textContent = todayStops;
+  document.getElementById('kpi-overdue').textContent = Array.isArray(overdueResp) ? overdueResp.length : 0;
+  document.getElementById('kpi-leads').textContent = recentLeads;
+  document.getElementById('kpi-routes').textContent = activeRoutes;
+
+  // Needs Attention: top 5 overdue
+  const topOverdue = (Array.isArray(overdueResp) ? overdueResp : []).slice(0, 5);
+  document.getElementById('attn-ct').textContent = (Array.isArray(overdueResp) ? overdueResp.length : 0) + ' overdue';
+  document.getElementById('attn-body').innerHTML = topOverdue.length ? topOverdue.map(c => `
+    <a href="/company/${{c.id}}" class="a-row" style="text-decoration:none;color:inherit">
+      <div class="dot dot-r"></div>
+      <span class="a-name">${{esc(c.name)}}</span>
+      <span class="a-meta" style="color:#ef4444">${{c.days_overdue}}d</span>
+    </a>
+  `).join('') : '<div class="empty" style="padding:16px 18px;color:var(--text3);font-size:13px">All caught up ✓</div>';
+
+  // Recent Activity: last 5
+  const recentActs = [...acts]
+    .filter(a => a['Created'] || a['Date'])
+    .sort((a, b) => (b['Created'] || b['Date'] || '').localeCompare(a['Created'] || a['Date'] || ''))
+    .slice(0, 5);
+  document.getElementById('act-ct').textContent = acts.length + ' total';
+  document.getElementById('act-body').innerHTML = recentActs.length ? recentActs.map(a => {{
+    const who = esc((a['Author'] || '').split('@')[0]);
+    const kind = esc(sv(a['Type']) || sv(a['Kind']) || 'Activity');
+    const when = fmt(a['Date'] || a['Created']);
+    const summary = esc((a['Summary'] || '').slice(0, 80));
+    return `<div class="a-row" style="align-items:flex-start;padding:10px 18px">
+      <div class="dot dot-g" style="margin-top:6px"></div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;color:var(--text);line-height:1.3">${{summary || kind}}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${{who || '—'}} • ${{when}}</div>
+      </div>
+    </div>`;
+  }}).join('') : '<div class="empty" style="padding:16px 18px;color:var(--text3);font-size:13px">No activities yet</div>';
+}}
+
+loadHomeDashboard().catch(err => console.error('Dashboard load failed:', err));
+"""
     return _mobile_page('m_home', 'Home', body, script_js, br, bt, user=user,
                          extra_html=GFR_EXTRA_HTML, extra_js=GFR_EXTRA_JS)
 
@@ -73,10 +173,7 @@ def _mobile_routes_dashboard_page(br: str, bt: str, user: dict = None) -> str:
         '<div class="mobile-hdr">'
         '<div><div class="mobile-hdr-title">My Routes</div>'
         '<div class="mobile-hdr-sub">All your assigned routes</div></div>'
-        '<div style="display:flex;align-items:center;gap:10px">'
-        '<button class="m-theme-btn" onclick="mToggleTheme()" id="m-theme-btn"><span id="m-theme-icon">\U0001f319</span></button>'
-        '<a href="/" style="font-size:12px;color:var(--text3);text-decoration:none">\u2190 Home</a>'
-        '</div>'
+        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div class="mobile-body">'
         # Today's route CTA
@@ -292,12 +389,14 @@ def _mobile_outreach_due_page(br: str, bt: str, user: dict = None) -> str:
         '<div class="mobile-hdr">'
         '<div><div class="mobile-hdr-title">Outreach Due</div>'
         '<div class="mobile-hdr-sub">Companies past their follow-up date</div></div>'
-        '<div style="display:flex;align-items:center;gap:10px">'
-        '<button class="m-theme-btn" onclick="mToggleTheme()" id="m-theme-btn"><span id="m-theme-icon">\U0001f319</span></button>'
-        '<a href="/" style="font-size:12px;color:var(--text3);text-decoration:none">← Home</a>'
-        '</div>'
+        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div class="mobile-body">'
+        '<div class="stats-row" style="margin-bottom:14px">'
+        '<div class="stat-chip c-red"><div class="label">Total Overdue</div><div class="value" id="od-kpi-total">—</div></div>'
+        '<div class="stat-chip c-orange"><div class="label">14+ Days</div><div class="value" id="od-kpi-bad">—</div></div>'
+        '<div class="stat-chip c-yellow"><div class="label">Worst</div><div class="value" id="od-kpi-worst">—</div></div>'
+        '</div>'
         '<div id="od-filter" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap"></div>'
         '<div id="od-summary" style="font-size:12px;color:var(--text3);margin-bottom:10px">Loading…</div>'
         '<div id="od-list"><div class="loading">Loading…</div></div>'
@@ -417,11 +516,18 @@ async function loadOD() {
   }
   renderFilter();
   renderList();
+  // KPI strip
+  var total = _OD_ROWS.length;
+  var bad14 = _OD_ROWS.filter(function(r) { return (r.days_overdue || 0) >= 14; }).length;
+  var worst = _OD_ROWS.reduce(function(m, r) { return Math.max(m, r.days_overdue || 0); }, 0);
+  document.getElementById('od-kpi-total').textContent = total;
+  document.getElementById('od-kpi-bad').textContent = bad14;
+  document.getElementById('od-kpi-worst').textContent = worst ? (worst + 'd') : '—';
 }
 
 loadOD();
 """
-    return _mobile_page('m_home', 'Outreach Due', body, js, br, bt, user=user)
+    return _mobile_page('m_outreach', 'Outreach Due', body, js, br, bt, user=user)
 
 
 def _mobile_outreach_map_page(br: str, bt: str, user: dict = None) -> str:
@@ -435,10 +541,7 @@ def _mobile_outreach_map_page(br: str, bt: str, user: dict = None) -> str:
         '<div class="mobile-hdr">'
         '<div><div class="mobile-hdr-title">Outreach Map</div>'
         '<div class="mobile-hdr-sub">Overdue follow-ups near you</div></div>'
-        '<div style="display:flex;align-items:center;gap:10px">'
-        '<button class="m-theme-btn" onclick="mToggleTheme()" id="m-theme-btn"><span id="m-theme-icon">\U0001f319</span></button>'
-        '<a href="/outreach" style="font-size:12px;color:var(--text3);text-decoration:none">← List</a>'
-        '</div>'
+        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div id="om-map" style="height:calc(100vh - 120px);width:100%;background:var(--bg2)"></div>'
         '<div id="om-msg" style="text-align:center;padding:8px;font-size:12px;color:var(--text3);min-height:14px"></div>'
@@ -559,7 +662,7 @@ function plotRows() {{
 
 loadOM();
 """
-    return _mobile_page('m_home', 'Outreach Map', body, js, br, bt, user=user)
+    return _mobile_page('m_outreach_map', 'Outreach Map', body, js, br, bt, user=user)
 
 
 def _mobile_company_detail_page(br: str, bt: str, company_id: int,
@@ -571,10 +674,7 @@ def _mobile_company_detail_page(br: str, bt: str, company_id: int,
         '<div class="mobile-hdr">'
         '<div style="flex:1;min-width:0"><div class="mobile-hdr-title" id="cd-name">Loading…</div>'
         '<div class="mobile-hdr-sub" id="cd-sub"></div></div>'
-        '<div style="display:flex;align-items:center;gap:10px">'
-        '<button class="m-theme-btn" onclick="mToggleTheme()" id="m-theme-btn"><span id="m-theme-icon">\U0001f319</span></button>'
-        '<a href="javascript:history.back()" style="font-size:12px;color:var(--text3);text-decoration:none">← Back</a>'
-        '</div>'
+        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div class="mobile-body">'
         '<div id="cd-meta" style="margin-bottom:14px"></div>'
@@ -796,7 +896,7 @@ async function submitLog() {{
 
 load();
 """
-    return _mobile_page('m_home', 'Company', body, js, br, bt, user=user)
+    return _mobile_page('m_directory', 'Company', body, js, br, bt, user=user)
 
 
 def _mobile_directory_page(br: str, bt: str, category: str = "",
@@ -818,12 +918,14 @@ def _mobile_directory_page(br: str, bt: str, category: str = "",
         '<div class="mobile-hdr">'
         f'<div><div class="mobile-hdr-title">{title}</div>'
         f'<div class="mobile-hdr-sub">{subtitle}</div></div>'
-        '<div style="display:flex;align-items:center;gap:10px">'
-        '<button class="m-theme-btn" onclick="mToggleTheme()" id="m-theme-btn"><span id="m-theme-icon">\U0001f319</span></button>'
-        '<a href="/" style="font-size:12px;color:var(--text3);text-decoration:none">← Home</a>'
-        '</div>'
+        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div class="mobile-body">'
+        '<div class="stats-row" style="margin-bottom:14px">'
+        '<div class="stat-chip c-blue"><div class="label">Total</div><div class="value" id="dir-kpi-total">—</div></div>'
+        '<div class="stat-chip c-green"><div class="label">Active</div><div class="value" id="dir-kpi-active">—</div></div>'
+        '<div class="stat-chip c-yellow"><div class="label">Needs Contact</div><div class="value" id="dir-kpi-new">—</div></div>'
+        '</div>'
         '<input type="search" id="dir-search" placeholder="Search name, address, phone…" oninput="renderDir()" '
         'style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;'
         'background:var(--card);color:var(--text);font-size:14px;margin-bottom:10px;font-family:inherit">'
@@ -950,11 +1052,21 @@ async function loadDir() {{
   }}
   renderStatusFilter();
   renderDir();
+  // KPI strip
+  var active = 0, needsContact = 0;
+  _DIR_ROWS.forEach(function(c) {{
+    var s = svJS(c['Contact Status']);
+    if (s === 'Active Partner') active++;
+    if (!s || s === 'Not Contacted') needsContact++;
+  }});
+  document.getElementById('dir-kpi-total').textContent = _DIR_ROWS.length;
+  document.getElementById('dir-kpi-active').textContent = active;
+  document.getElementById('dir-kpi-new').textContent = needsContact;
 }}
 
 loadDir();
 """
-    return _mobile_page('m_home', title, body, js, br, bt, user=user)
+    return _mobile_page('m_directory', title, body, js, br, bt, user=user)
 
 
 def _mobile_lead_capture_page(br: str, bt: str, user: dict = None) -> str:
@@ -965,10 +1077,7 @@ def _mobile_lead_capture_page(br: str, bt: str, user: dict = None) -> str:
         '<div class="mobile-hdr">'
         '<div><div class="mobile-hdr-title">Capture Lead</div>'
         '<div class="mobile-hdr-sub">Log a new potential patient</div></div>'
-        '<div style="display:flex;align-items:center;gap:10px">'
-        '<button class="m-theme-btn" onclick="mToggleTheme()" id="m-theme-btn"><span id="m-theme-icon">\U0001f319</span></button>'
-        '<a href="/" style="font-size:12px;color:var(--text3);text-decoration:none">\u2190 Home</a>'
-        '</div>'
+        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div class="mobile-body">'
         '<div id="lead-form" style="padding:4px 0">'
@@ -1199,10 +1308,7 @@ def _mobile_log_page(br: str, bt: str, user: dict = None) -> str:
         '<div class="mobile-hdr">'
         '<div><div class="mobile-hdr-title">Log Activity</div>'
         '<div class="mobile-hdr-sub">Select a form to get started</div></div>'
-        '<div style="display:flex;align-items:center;gap:10px">'
-        '<button class="m-theme-btn" onclick="mToggleTheme()" id="m-theme-btn"><span id="m-theme-icon">\U0001f319</span></button>'
-        '<a href="/" style="font-size:12px;color:var(--text3);text-decoration:none">\u2190 Home</a>'
-        '</div>'
+        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div class="mobile-body">'
         # Cards (single-column on mobile via CSS)
@@ -2019,13 +2125,17 @@ def _mobile_recent_page(br: str, bt: str, user: dict = None) -> str:
         '<div class="mobile-hdr">'
         '<div><div class="mobile-hdr-title">Recent Activity</div>'
         '<div class="mobile-hdr-sub">Your last 20 field logs</div></div>'
-        '<div style="display:flex;align-items:center;gap:10px">'
-        '<button class="m-theme-btn" onclick="mToggleTheme()" id="m-theme-btn"><span id="m-theme-icon">\U0001f319</span></button>'
-        '<a href="/" style="font-size:12px;color:var(--text3);text-decoration:none">\u2190 Home</a>'
+        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
+        '<div class="mobile-body">'
+        '<div class="stats-row" style="margin-bottom:14px">'
+        '<div class="stat-chip c-blue"><div class="label">Today</div><div class="value" id="rec-kpi-today">\u2014</div></div>'
+        '<div class="stat-chip c-green"><div class="label">This Week</div><div class="value" id="rec-kpi-week">\u2014</div></div>'
+        '<div class="stat-chip c-orange"><div class="label">By You</div><div class="value" id="rec-kpi-mine">\u2014</div></div>'
         '</div>'
-        '<div class="mobile-body" id="recent-body">'
+        '<div id="recent-body">'
         '<div class="loading">Loading\u2026</div>'
+        '</div>'
         '</div>'
     )
     recent_js = f"""
@@ -2039,6 +2149,22 @@ async function loadRecent() {{
     var t = r['Type'] ? (r['Type'].value || r['Type']) : '';
     return GFR_TYPES.indexOf(t) >= 0;
   }});
+  // KPI computation before sort/slice
+  var today = new Date().toISOString().slice(0,10);
+  var weekAgo = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+  var kToday = 0, kWeek = 0, kMine = 0;
+  var lowMine = (MY_NAME || '').toLowerCase();
+  mine.forEach(function(r) {{
+    var d = (r['Date']||'').slice(0,10);
+    if (d === today) kToday++;
+    if (d >= weekAgo) kWeek++;
+    var who = r['Recorded By'] || r['Author'] || '';
+    if (who && typeof who === 'string' && lowMine && who.toLowerCase().indexOf(lowMine) !== -1) kMine++;
+  }});
+  document.getElementById('rec-kpi-today').textContent = kToday;
+  document.getElementById('rec-kpi-week').textContent = kWeek;
+  document.getElementById('rec-kpi-mine').textContent = kMine;
+
   mine.sort(function(a,b){{return (b['Date']||'').localeCompare(a['Date']||'');}});
   mine = mine.slice(0,20);
   var body = document.getElementById('recent-body');
