@@ -122,6 +122,23 @@ function initGMap() {{
     }});
     setTimeout(function(){{ google.maps.event.trigger(_gMap, 'resize'); _gMap.setCenter({{lat: _GOFF_LAT, lng: _GOFF_LNG}}); }}, 100);
     renderGMarkers();
+    // ── Venue focus mode: /map?venue=<id> centers and opens its sheet ─────
+    var qs = new URLSearchParams(location.search);
+    var focusId = parseInt(qs.get('venue'), 10);
+    if (focusId) {{
+      var v = _gVenues.find(function(x) {{ return x.id === focusId; }});
+      if (v) {{
+        var lat = parseFloat(v['Latitude']), lng = parseFloat(v['Longitude']);
+        if (lat && lng) {{
+          _gMap.setCenter({{lat: lat, lng: lng}});
+          _gMap.setZoom(17);
+        }}
+        // Hide the filter bar since we're not browsing, and open the sheet.
+        var fb = document.querySelector('.m-map-filters');
+        if (fb) fb.style.display = 'none';
+        openSheet(v);
+      }}
+    }}
   }};
   var s = document.createElement('script');
   s.src = 'https://maps.googleapis.com/maps/api/js?key=' + GK + '&callback=_gMapReadyCb';

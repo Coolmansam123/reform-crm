@@ -138,10 +138,16 @@ async def community_directory_page(request: Request):
 
 @router.get("/map", response_class=HTMLResponse)
 async def field_map(request: Request):
+    """Focus view for a single venue: /map?venue=<venue_id>.
+
+    Route planning is hub-only, so bare /map redirects home. When ?venue= is
+    supplied, any authenticated user can see the focused view (reps follow
+    the Navigate link from a company page).
+    """
     user, br, bt = await _guard(request)
     if not user:
         return RedirectResponse(url="/login")
-    if not _is_admin(user):
+    if not request.query_params.get("venue"):
         return RedirectResponse(url="/")
     return HTMLResponse(_mobile_map_page(br, bt, user=user))
 

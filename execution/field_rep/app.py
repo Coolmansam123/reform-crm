@@ -20,11 +20,18 @@ from . import storage
 from .auth import router as auth_router
 from .routes.api import router as api_router
 from .routes.pages import router as pages_router
-from .warm import warm_loop
+from .warm import _warm_once, warm_loop
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Block until the Redis cache is populated so the first user request
+    # after a deploy reads warm data instead of paying the full Baserow
+    # round-trip on every table.
+    try:
+        await _warm_once()
+    except Exception as e:
+        print(f"[lifespan] initial warm failed (continuing anyway): {e}")
     warmer = asyncio.create_task(warm_loop())
     try:
         yield

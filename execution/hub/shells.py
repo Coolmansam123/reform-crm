@@ -109,7 +109,6 @@ def _build_mobile_drawer(active: str, user: dict) -> str:
         + link('m_outreach',   '📞 Outreach Due',       '/outreach',      grp=True)
         + link('m_recent',     '⏱️ Recent Activity',  '/recent',        grp=True)
         + sep
-        + (link('m_map',       '📍 Full Venue Map',     '/map') if admin else '')
         + link('m_outreach_map','📍 Outreach Map',      '/outreach/map')
         + sep
         + link('m_lead',       '📋 Capture Lead',       '/lead')

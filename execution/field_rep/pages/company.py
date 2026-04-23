@@ -13,6 +13,8 @@ def _mobile_company_detail_page(br: str, bt: str, company_id: int,
     user = user or {}
     body = (
         '<div class="mobile-hdr">'
+        '<button class="m-hamburger" onclick="goBack()" aria-label="Back" '
+        'style="margin-right:10px">←</button>'
         '<div style="flex:1;min-width:0"><div class="mobile-hdr-title" id="cd-name">Loading…</div>'
         '<div class="mobile-hdr-sub" id="cd-sub"></div></div>'
         '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
@@ -110,6 +112,14 @@ function fmtDate(s) {{
   return parts[1] + '/' + parts[2] + '/' + parts[0].slice(2);
 }}
 
+function goBack() {{
+  if (document.referrer && document.referrer.indexOf(location.origin) === 0) {{
+    history.back();
+  }} else {{
+    location.href = '/';
+  }}
+}}
+
 function renderCompany() {{
   var c = _COMPANY;
   var name = c.Name || '(unnamed)';
@@ -129,11 +139,23 @@ function renderCompany() {{
   var fu    = c['Follow-Up Date'] || '';
   var notes = c.Notes || '';
 
-  var mapsUrl = addr ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr) : '';
+  // Prefer the internal map view if we know the underlying guerilla venue id.
+  // Falls back to Google Maps for hub-only / community companies without a
+  // migrated venue row.
+  var legacySrc = svJS(c['Legacy Source']);
+  var legacyId  = c['Legacy ID'];
+  var navUrl, navTarget;
+  if (legacySrc === 'guerilla_venue' && legacyId) {{
+    navUrl = '/map?venue=' + encodeURIComponent(legacyId);
+    navTarget = '_self';
+  }} else {{
+    navUrl = addr ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr) : '';
+    navTarget = '_blank';
+  }}
   var html = '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px">';
   if (phone) html += '<div style="padding:6px 0;border-bottom:1px solid var(--border)"><a href="tel:' + esc(phone) + '" style="color:#3b82f6;text-decoration:none;font-size:14px;font-weight:600">\U0001f4de ' + esc(phone) + '</a></div>';
   if (email) html += '<div style="padding:6px 0;border-bottom:1px solid var(--border)"><a href="mailto:' + esc(email) + '" style="color:#3b82f6;text-decoration:none;font-size:14px;font-weight:600">✉️ ' + esc(email) + '</a></div>';
-  if (addr)  html += '<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text2)">\U0001f4cd ' + esc(addr) + ' <a href="' + esc(mapsUrl) + '" target="_blank" style="color:#3b82f6;font-size:12px;margin-left:6px">Navigate →</a></div>';
+  if (addr)  html += '<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text2)">\U0001f4cd ' + esc(addr) + (navUrl ? ' <a href="' + esc(navUrl) + '" target="' + navTarget + '" style="color:#3b82f6;font-size:12px;margin-left:6px">Navigate →</a>' : '') + '</div>';
   if (site)  html += '<div style="padding:6px 0;border-bottom:1px solid var(--border)"><a href="' + esc(site) + '" target="_blank" style="color:#3b82f6;text-decoration:none;font-size:13px">\U0001f310 ' + esc(site) + '</a></div>';
   if (fu)    html += '<div style="padding:6px 0;font-size:13px;color:var(--text2)">\U0001f4c5 Next follow-up: <strong>' + esc(fmtDate(fu)) + '</strong></div>';
   if (notes) html += '<div style="padding:10px 0 0;margin-top:8px;border-top:1px solid var(--border);font-size:12px;color:var(--text3);white-space:pre-wrap">' + esc(notes) + '</div>';
