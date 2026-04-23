@@ -60,13 +60,6 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         '<span class="panel-ct" id="attn-ct">—</span></div>'
         '<div class="panel-body" id="attn-body"><div class="loading" style="padding:16px">Loading…</div></div>'
         '</div>'
-
-        # Recent Activity panel
-        '<div class="panel">'
-        '<div class="panel-hd"><span class="panel-title">⏱️ Recent Activity</span>'
-        '<span class="panel-ct" id="act-ct">—</span></div>'
-        '<div class="panel-body" id="act-body"><div class="loading" style="padding:16px">Loading…</div></div>'
-        '</div>'
         '</div>'
     )
     user_email = (user.get('email', '') or '').strip().lower()
@@ -76,10 +69,9 @@ const USER_EMAIL = {repr(user_email)};
 const TOOL = {{ venuesT: {T_GOR_VENUES} }};
 
 async function loadHomeDashboard() {{
-  const [routes, stops, acts, leads, overdueResp] = await Promise.all([
+  const [routes, stops, leads, overdueResp] = await Promise.all([
     fetchAll({T_GOR_ROUTES}),
     fetchAll({T_GOR_ROUTE_STOPS}),
-    fetchAll({T_ACTIVITIES}),
     fetchAll({T_LEADS}),
     fetch('/api/outreach/due').then(r => r.ok ? r.json() : []).catch(() => [])
   ]);
@@ -139,25 +131,6 @@ async function loadHomeDashboard() {{
     </a>
   `).join('') : '<div class="empty" style="padding:16px 18px;color:var(--text3);font-size:13px">All caught up ✓</div>';
 
-  // Recent Activity: last 5
-  const recentActs = [...acts]
-    .filter(a => a['Created'] || a['Date'])
-    .sort((a, b) => (b['Created'] || b['Date'] || '').localeCompare(a['Created'] || a['Date'] || ''))
-    .slice(0, 5);
-  document.getElementById('act-ct').textContent = acts.length + ' total';
-  document.getElementById('act-body').innerHTML = recentActs.length ? recentActs.map(a => {{
-    const who = esc((a['Author'] || '').split('@')[0]);
-    const kind = esc(sv(a['Type']) || sv(a['Kind']) || 'Activity');
-    const when = fmt(a['Date'] || a['Created']);
-    const summary = esc((a['Summary'] || '').slice(0, 80));
-    return `<div class="a-row" style="align-items:flex-start;padding:10px 18px">
-      <div class="dot dot-g" style="margin-top:6px"></div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;color:var(--text);line-height:1.3">${{summary || kind}}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${{who || '—'}} • ${{when}}</div>
-      </div>
-    </div>`;
-  }}).join('') : '<div class="empty" style="padding:16px 18px;color:var(--text3);font-size:13px">No activities yet</div>';
 }}
 
 loadHomeDashboard().catch(err => console.error('Dashboard load failed:', err));

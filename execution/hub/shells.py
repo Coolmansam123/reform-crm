@@ -133,13 +133,13 @@ def _build_mobile_drawer(active: str, user: dict) -> str:
 def _mobile_page(active: str, title: str, body_html: str, script_js: str,
                  br: str, bt: str, user: dict = None, wrap_cls: str = '',
                  extra_html: str = '', extra_js: str = '') -> str:
-    """Page shell for the routes mobile app. Hamburger + slide-out drawer. Dark only."""
+    """Page shell for the routes mobile app. Hamburger + slide-out drawer. Light only (outdoor use)."""
     shared = _JS_SHARED.format(br=br, bt=bt)
     user = user or {}
     drawer = _build_mobile_drawer(active, user)
     wrap_class = f'mobile-wrap {wrap_cls}'.strip()
     return (
-        '<!DOCTYPE html><html lang="en">'
+        '<!DOCTYPE html><html lang="en" data-theme="light">'
         '<head><meta charset="UTF-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">'
         f'<title>{title} — Reform</title>'
