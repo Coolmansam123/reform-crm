@@ -76,13 +76,15 @@ const USER_EMAIL = {repr(user_email)};
 const TOOL = {{ venuesT: {T_GOR_VENUES} }};
 
 async function loadHomeDashboard() {{
-  const [routes, stops, leads, boxes, overdueResp] = await Promise.all([
+  const [routes, stops, leads, boxes, companies, overdueResp] = await Promise.all([
     fetchAll({T_GOR_ROUTES}),
     fetchAll({T_GOR_ROUTE_STOPS}),
     fetchAll({T_LEADS}),
     fetchAll({T_GOR_BOXES}),
+    fetchAll({T_COMPANIES}),
     fetch('/api/outreach/due').then(r => r.ok ? r.json() : []).catch(() => [])
   ]);
+  const venueCoMap = buildVenueCompanyMap(companies);
 
   const myRoutes = routes.filter(r => (r['Assigned To']||'').trim().toLowerCase() === USER_EMAIL);
   const today = new Date().toISOString().slice(0, 10);
@@ -164,9 +166,12 @@ async function loadHomeDashboard() {{
     const btn = (routeId && x.venueId)
       ? '<button id="box-add-' + i + '" onclick="addBoxToTodayRoute(' + i + ')" style="background:#ea580c;color:#fff;border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:600;cursor:pointer;min-height:34px;white-space:nowrap">+ Add</button>'
       : '<span style="font-size:10px;color:var(--text4)">' + (routeId ? 'no venue' : 'no active route') + '</span>';
+    const companyId = venueCoMap[x.venueId];
+    const nameHtml = companyId
+      ? '<a href="/company/' + companyId + '" style="font-size:14px;font-weight:600;color:var(--text);text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.venueName) + '</a>'
+      : '<div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.venueName) + '</div>';
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border)">'
-      + '<div style="flex:1;min-width:0">'
-      +   '<div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.venueName) + '</div>'
+      + '<div style="flex:1;min-width:0">' + nameHtml
       +   '<div style="margin-top:4px">' + badge + ' <span style="font-size:11px;color:var(--text3)">placed ' + esc(fmt(x.placed)) + '</span></div>'
       + '</div>' + btn + '</div>';
   }}).join('') : '<div class="empty" style="padding:16px 18px;color:var(--text3);font-size:13px">No active boxes</div>';
@@ -242,10 +247,11 @@ def _mobile_routes_dashboard_page(br: str, bt: str, user: dict = None) -> str:
 var USER_EMAIL = {user_email!r};
 
 async function load() {{
-  var [routes, stops, venues] = await Promise.all([
+  var [routes, stops, venues, companies] = await Promise.all([
     fetchAll({T_GOR_ROUTES}),
     fetchAll({T_GOR_ROUTE_STOPS}),
-    fetchAll({T_GOR_VENUES})
+    fetchAll({T_GOR_VENUES}),
+    fetchAll({T_COMPANIES})
   ]);
   // Filter to user's routes
   routes = routes.filter(function(r) {{
@@ -254,6 +260,7 @@ async function load() {{
   // Build venue lookup
   var venueMap = {{}};
   venues.forEach(function(v) {{ venueMap[v.id] = v; }});
+  var venueCoMap = buildVenueCompanyMap(companies);
 
   // Today's route CTA
   var today = new Date().toISOString().split('T')[0];
@@ -365,9 +372,13 @@ async function load() {{
         var vl = s['Venue'];
         var vId = Array.isArray(vl)&&vl.length ? vl[0].id : null;
         var vName = vId&&venueMap[vId] ? (venueMap[vId]['Name']||'(unnamed)') : (s['Name']||'(unknown)');
+        var coId = vId ? venueCoMap[vId] : null;
+        var nameHtml = coId
+          ? '<a href="/company/'+coId+'" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);text-decoration:none">'+esc(vName)+'</a>'
+          : '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(vName)+'</span>';
         h += '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">';
         h += '<div style="width:20px;height:20px;border-radius:50%;background:'+sColor+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0">'+(i+1)+'</div>';
-        h += '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(vName)+'</span>';
+        h += nameHtml;
         h += '<span style="font-size:10px;color:'+sColor+';font-weight:600;flex-shrink:0">'+esc(ss)+'</span>';
         h += '</div>';
       }});
@@ -1737,12 +1748,16 @@ async function loadRouteVenueData(stop) {{
   // Get venue ID from the stop's venue link
   var venueId = stop.venue_id;
   if (!venueId) return;
-  // Load venue details, activities, events, boxes in parallel
-  var results = await Promise.all([fetchAll(_GGOR_VENUES), fetchAll(_GGOR_ACTS), fetchAll(_GGOR_BOXES)]);
-  var venues = results[0], acts = results[1], boxes = results[2];
+  // Load venue details, activities, events, boxes, companies in parallel
+  var results = await Promise.all([
+    fetchAll(_GGOR_VENUES), fetchAll(_GGOR_ACTS), fetchAll(_GGOR_BOXES),
+    fetchAll({T_COMPANIES})
+  ]);
+  var venues = results[0], acts = results[1], boxes = results[2], companies = results[3];
   var v = venues.find(function(x){{return x.id === venueId;}});
   if (!v) return;
   var id = stop.stop_id;
+  var companyId = buildVenueCompanyMap(companies)[venueId];
 
   // Fill Info tab
   var infoEl = document.getElementById('rv-info-' + id);
@@ -1757,6 +1772,7 @@ async function loadRouteVenueData(stop) {{
     if (phone) ih += '<div style="margin-bottom:8px">\U0001f4de <a href="tel:'+esc(phone)+'" style="color:var(--text1)">'+esc(phone)+'</a></div>';
     if (website) ih += '<div style="margin-bottom:8px">\U0001f310 <a href="'+esc(website)+'" target="_blank" style="color:#3b82f6">'+esc(website)+'</a></div>';
     if (gmUrl) ih += '<div style="margin-bottom:8px"><a href="'+esc(gmUrl)+'" target="_blank" style="color:#3b82f6;font-size:12px">Google Maps \u2197</a></div>';
+    if (companyId) ih += '<div style="margin-bottom:8px"><a href="/company/'+companyId+'" style="color:#3b82f6;font-size:13px;font-weight:600">View full profile \u2192</a></div>';
     ih += '<hr style="border:none;border-top:1px solid var(--border);margin:10px 0">';
     ih += '<div class="m-sheet-lbl">Contact Status</div>';
     var stOpts = IS_ADMIN ? ['Not Contacted','Contacted','In Discussion','Active Partner'] : ['Not Contacted','Contacted','In Discussion'];

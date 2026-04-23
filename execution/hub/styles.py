@@ -402,9 +402,9 @@ body.login-body { display:block; }
 .m-hamburger:hover { background:var(--card-hover); }
 .m-drawer-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:899; }
 .m-drawer-backdrop.open { display:block; }
-.m-drawer { position:fixed; top:0; left:0; bottom:0; width:280px; max-width:85vw;
-            background:var(--bg2); border-right:1px solid var(--border); z-index:900;
-            transform:translateX(-100%); transition:transform .25s ease; overflow-y:auto;
+.m-drawer { position:fixed; top:0; right:0; bottom:0; width:280px; max-width:85vw;
+            background:var(--bg2); border-left:1px solid var(--border); z-index:900;
+            transform:translateX(100%); transition:transform .25s ease; overflow-y:auto;
             padding:16px 0; }
 .m-drawer.open { transform:translateX(0); }
 .m-drawer-hdr { display:flex; justify-content:space-between; align-items:center;
@@ -708,6 +708,19 @@ function fmt(ds) {{
 
 function esc(s) {{
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}}
+
+// Build a venue-id to company-id map from a T_COMPANIES row list.
+// A company row with Legacy Source equal to guerilla_venue and a Legacy ID set
+// is the migrated copy of a T_GOR_VENUES row; use its id for /company/<id>.
+function buildVenueCompanyMap(companies) {{
+  var m = {{}};
+  (companies || []).forEach(function(c) {{
+    var src = (c['Legacy Source'] && c['Legacy Source'].value) || c['Legacy Source'] || '';
+    var lid = c['Legacy ID'];
+    if (src === 'guerilla_venue' && lid) m[lid] = c.id;
+  }});
+  return m;
 }}
 
 let _lastRefresh = '';
