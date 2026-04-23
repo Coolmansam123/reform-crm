@@ -135,6 +135,10 @@ async function loadOD() {
     var r = await fetch('/api/outreach/due');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     _OD_ROWS = await r.json();
+    // Active Partners have graduated out of the rep's outreach pipeline.
+    _OD_ROWS = (_OD_ROWS || []).filter(function(row) {
+      return row.status !== 'Active Partner';
+    });
   } catch (e) {
     document.getElementById('od-summary').textContent = '';
     document.getElementById('od-list').innerHTML =
@@ -201,6 +205,10 @@ async function loadOM() {{
     var r = await fetch('/api/outreach/due');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     _OM_ROWS = await r.json();
+    // Active Partners have graduated out of the rep's outreach pipeline.
+    _OM_ROWS = (_OM_ROWS || []).filter(function(row) {{
+      return row.status !== 'Active Partner';
+    }});
   }} catch (e) {{
     document.getElementById('om-msg').textContent = 'Failed to load: ' + (e.message || 'unknown');
     return;

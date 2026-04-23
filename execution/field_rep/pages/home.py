@@ -66,7 +66,7 @@ const USER_EMAIL = {repr(user_email)};
 const TOOL = {{ venuesT: {T_GOR_VENUES} }};
 
 async function loadHomeDashboard() {{
-  const [routes, stops, leads, boxes, companies, overdueResp] = await Promise.all([
+  const [routes, stops, leads, boxes, companies, overdueRaw] = await Promise.all([
     fetchAll({T_GOR_ROUTES}),
     fetchAll({T_GOR_ROUTE_STOPS}),
     fetchAll({T_LEADS}),
@@ -74,6 +74,9 @@ async function loadHomeDashboard() {{
     fetchAll({T_COMPANIES}),
     fetch('/api/outreach/due').then(r => r.ok ? r.json() : []).catch(() => [])
   ]);
+  // Active Partners have graduated out of the rep's outreach pipeline.
+  const overdueResp = (Array.isArray(overdueRaw) ? overdueRaw : [])
+    .filter(c => c.status !== 'Active Partner');
   const venueCoMap = buildVenueCompanyMap(companies);
 
   const myRoutes = routes.filter(r => (r['Assigned To']||'').trim().toLowerCase() === USER_EMAIL);
