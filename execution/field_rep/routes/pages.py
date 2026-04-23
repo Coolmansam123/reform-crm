@@ -76,6 +76,8 @@ async def recent(request: Request):
     user, br, bt = await _guard(request)
     if not user:
         return RedirectResponse(url="/login")
+    if not _is_admin(user):
+        return RedirectResponse(url="/")
     return HTMLResponse(_mobile_recent_page(br, bt, user=user))
 
 

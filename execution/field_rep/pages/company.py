@@ -303,7 +303,8 @@ def _mobile_directory_page(br: str, bt: str, category: str = "",
     js = f"""
 var CATEGORY = {cat_js};
 var _DIR_ROWS = [];
-var _DIR_STATUS = 'all';
+var _DIR_STATUS = 'prospects';
+var _PROSPECT_STATUSES = ['Not Contacted', 'Contacted', 'In Discussion'];
 
 var STATUS_META = {{
   'Not Contacted':  {{color: '#64748b'}},
@@ -311,6 +312,13 @@ var STATUS_META = {{
   'In Discussion':  {{color: '#ea580c'}},
   'Active Partner': {{color: '#059669'}},
   'Blacklisted':    {{color: '#dc2626'}},
+}};
+
+var DIR_CAT_META = {{
+  attorney:  {{label: 'Attorney',  color: '#7c3aed'}},
+  guerilla:  {{label: 'Guerilla',  color: '#ea580c'}},
+  community: {{label: 'Community', color: '#059669'}},
+  other:     {{label: 'Other',     color: '#64748b'}},
 }};
 
 function esc(s) {{
@@ -327,19 +335,25 @@ function svJS(v) {{
 }}
 
 function renderStatusFilter() {{
-  var counts = {{ all: _DIR_ROWS.length }};
+  var counts = {{ all: _DIR_ROWS.length, prospects: 0 }};
   Object.keys(STATUS_META).forEach(function(k) {{ counts[k] = 0; }});
   _DIR_ROWS.forEach(function(c) {{
     var s = svJS(c['Contact Status']) || 'Not Contacted';
     counts[s] = (counts[s] || 0) + 1;
+    if (_PROSPECT_STATUSES.indexOf(s) !== -1) counts.prospects += 1;
   }});
-  var opts = ['all'].concat(Object.keys(STATUS_META));
+  // Prospects first so it reads as the default intent, then all, then real statuses.
+  var opts = ['prospects', 'all'].concat(Object.keys(STATUS_META));
   var html = '';
   opts.forEach(function(k) {{
-    if (k !== 'all' && !counts[k]) return;
+    if (k === 'prospects' && !counts.prospects) return;
+    if (k !== 'all' && k !== 'prospects' && !counts[k]) return;
     var active = k === _DIR_STATUS;
-    var color = k === 'all' ? '#0f172a' : (STATUS_META[k] || {{}}).color || '#64748b';
-    var label = k === 'all' ? 'All' : k;
+    var color;
+    var label;
+    if (k === 'all')             {{ color = '#0f172a'; label = 'All'; }}
+    else if (k === 'prospects')  {{ color = '#2563eb'; label = 'Prospects'; }}
+    else                         {{ color = (STATUS_META[k] || {{}}).color || '#64748b'; label = k; }}
     html +=
       '<button onclick="setStatus(\\'' + k + '\\')" ' +
       'style="padding:5px 10px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;' +
@@ -360,8 +374,10 @@ function setStatus(k) {{
 function renderDir() {{
   var q = (document.getElementById('dir-search').value || '').toLowerCase().trim();
   var filtered = _DIR_ROWS.filter(function(c) {{
-    if (_DIR_STATUS !== 'all') {{
-      var s = svJS(c['Contact Status']) || 'Not Contacted';
+    var s = svJS(c['Contact Status']) || 'Not Contacted';
+    if (_DIR_STATUS === 'prospects') {{
+      if (_PROSPECT_STATUSES.indexOf(s) === -1) return false;
+    }} else if (_DIR_STATUS !== 'all') {{
       if (s !== _DIR_STATUS) return false;
     }}
     if (!q) return true;
@@ -382,14 +398,23 @@ function renderDir() {{
   filtered.forEach(function(c) {{
     var status = svJS(c['Contact Status']) || 'Not Contacted';
     var sMeta = STATUS_META[status] || {{color: '#64748b'}};
+    var catKey = (svJS(c.Category) || 'other').toLowerCase();
+    var catMeta = DIR_CAT_META[catKey] || DIR_CAT_META.other;
+    // Only show the category pill when no specific category is filtered —
+    // it's redundant on /attorney, /guerilla, /community.
+    var catPill = CATEGORY ? '' :
+      '<span style="background:' + catMeta.color + '22;color:' + catMeta.color +
+      ';font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;white-space:nowrap">' +
+      esc(catMeta.label) + '</span>';
     html +=
       '<div onclick="location.href=\\'/company/' + c.id + '\\'" ' +
       'style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;' +
-      'margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:10px">' +
+      'margin-bottom:6px;cursor:pointer;display:flex;align-items:center;gap:8px">' +
       '<div style="flex:1;min-width:0">' +
       '<div style="font-size:14px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.Name || '(unnamed)') + '</div>' +
       (c.Address ? '<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.Address) + '</div>' : '') +
       '</div>' +
+      catPill +
       '<span style="background:' + sMeta.color + '22;color:' + sMeta.color + ';font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap">' + esc(status) + '</span>' +
       '</div>';
   }});

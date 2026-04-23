@@ -165,16 +165,18 @@ loadOD();
 
 
 def _mobile_outreach_map_page(br: str, bt: str, user: dict = None) -> str:
-    """Full-screen Google Map plotting overdue-follow-up companies near the
-    rep's current location. Tap a pin → InfoWindow → "Details" link opens
-    the mobile company detail page."""
+    """Full-screen Google Map showing today's route stops with a live-GPS
+    marker. Tap a stop → InfoWindow with name/address/status and a link to
+    the company detail. Replaces the prior "overdue follow-ups" map since
+    planning now lives in the hub and reps want a route overview."""
     import os as _os
+    from hub.shared import T_COMPANIES as _TC
     gk = _os.environ.get("GOOGLE_MAPS_API_KEY", "")
     user = user or {}
     body = (
         '<div class="mobile-hdr">'
-        '<div><div class="mobile-hdr-title">Outreach Map</div>'
-        '<div class="mobile-hdr-sub">Overdue follow-ups near you</div></div>'
+        '<div><div class="mobile-hdr-title">Route Map</div>'
+        '<div class="mobile-hdr-sub" id="om-sub">Your route at a glance</div></div>'
         '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div id="om-map" style="height:calc(100vh - 120px);width:100%;background:var(--bg2)"></div>'
@@ -183,16 +185,13 @@ def _mobile_outreach_map_page(br: str, bt: str, user: dict = None) -> str:
     js = f"""
 const GK = {repr(gk)};
 const OFFICE = {{lat: 33.9478, lng: -118.1335}};  // Downey
+const _STATUS_COLORS = {{'Pending':'#4285f4','Visited':'#059669','Skipped':'#f97316','Not Reached':'#ef4444'}};
 let _OM_MAP = null;
-let _OM_ROWS = [];
+let _OM_ROUTE = null;
+let _OM_STOPS = [];
 let _OM_MARKERS = [];
-
-var CAT_COLOR = {{
-  attorney: '#7c3aed',
-  guerilla: '#ea580c',
-  community: '#059669',
-  other: '#64748b',
-}};
+let _OM_USER_MARKER = null;
+let _OM_VENUE_TO_CO = {{}};
 
 function esc(s) {{
   return String(s == null ? '' : s)
@@ -202,13 +201,13 @@ function esc(s) {{
 
 async function loadOM() {{
   try {{
-    var r = await fetch('/api/outreach/due');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    _OM_ROWS = await r.json();
-    // Active Partners have graduated out of the rep's outreach pipeline.
-    _OM_ROWS = (_OM_ROWS || []).filter(function(row) {{
-      return row.status !== 'Active Partner';
-    }});
+    var [routeResp, companies] = await Promise.all([
+      fetch('/api/guerilla/routes/today').then(function(r) {{ return r.ok ? r.json() : {{route: null, stops: []}}; }}),
+      fetchAll({_TC}),
+    ]);
+    _OM_ROUTE = routeResp.route;
+    _OM_STOPS = routeResp.stops || [];
+    _OM_VENUE_TO_CO = buildVenueCompanyMap(companies);
   }} catch (e) {{
     document.getElementById('om-msg').textContent = 'Failed to load: ' + (e.message || 'unknown');
     return;
@@ -217,7 +216,6 @@ async function loadOM() {{
     document.getElementById('om-msg').textContent = 'Maps API key not configured.';
     return;
   }}
-  // Lazy-load Maps JS
   if (window.google && window.google.maps) {{
     _omReady();
   }} else {{
@@ -230,59 +228,80 @@ async function loadOM() {{
 }}
 
 function _omReady() {{
-  var center = OFFICE;
   _OM_MAP = new google.maps.Map(document.getElementById('om-map'), {{
-    center: center,
+    center: OFFICE,
     zoom: 11,
     mapTypeControl: false,
     streetViewControl: false,
     fullscreenControl: false,
   }});
-  plotRows();
-  // Try to center on rep's live location — non-blocking.
+  // Office marker so reps can see their starting point.
+  new google.maps.Marker({{
+    position: OFFICE, map: _OM_MAP,
+    title: 'Reform Chiropractic',
+    icon: {{path: google.maps.SymbolPath.CIRCLE, scale: 14, fillColor: '#1e3a5f',
+            fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3}},
+    label: {{text: '✦', color: '#fff', fontWeight: '700', fontSize: '14px'}},
+    zIndex: 800,
+  }});
+  plotStops();
+  // Live GPS — kept for admin visibility into where reps are in the field.
   if (navigator.geolocation) {{
-    navigator.geolocation.getCurrentPosition(function(pos) {{
+    navigator.geolocation.watchPosition(function(pos) {{
       var here = {{lat: pos.coords.latitude, lng: pos.coords.longitude}};
-      _OM_MAP.panTo(here);
-      _OM_MAP.setZoom(13);
-      new google.maps.Marker({{
-        position: here, map: _OM_MAP,
-        icon: {{
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 8, fillColor: '#3b82f6', fillOpacity: 1,
-          strokeColor: '#fff', strokeWeight: 2,
-        }},
-        title: 'You are here',
-      }});
-    }}, function() {{}}, {{timeout: 5000}});
+      if (_OM_USER_MARKER) {{
+        _OM_USER_MARKER.setPosition(here);
+      }} else {{
+        _OM_USER_MARKER = new google.maps.Marker({{
+          position: here, map: _OM_MAP,
+          icon: {{path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#3b82f6',
+                  fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2}},
+          title: 'You are here',
+          zIndex: 1000,
+        }});
+        // On first fix, if we had no route to frame the map, center on the rep.
+        if (!_OM_STOPS.length) {{
+          _OM_MAP.panTo(here);
+          _OM_MAP.setZoom(13);
+        }}
+      }}
+    }}, function() {{}}, {{timeout: 10000, enableHighAccuracy: true}});
   }}
 }}
 
-function plotRows() {{
+function plotStops() {{
   _OM_MARKERS.forEach(function(m) {{ m.setMap(null); }});
   _OM_MARKERS = [];
+  if (!_OM_STOPS.length) {{
+    var sub = document.getElementById('om-sub');
+    if (sub) sub.textContent = 'No route assigned today';
+    document.getElementById('om-msg').textContent = 'No route scheduled — admin can assign one from the hub.';
+    return;
+  }}
   var bounds = new google.maps.LatLngBounds();
+  bounds.extend(OFFICE);
   var plotted = 0;
-  _OM_ROWS.forEach(function(r) {{
-    var lat = parseFloat(r.latitude); var lng = parseFloat(r.longitude);
+  _OM_STOPS.forEach(function(stop, i) {{
+    var lat = parseFloat(stop.lat), lng = parseFloat(stop.lng);
     if (!lat || !lng || isNaN(lat) || isNaN(lng)) return;
-    var color = CAT_COLOR[r.category] || CAT_COLOR.other;
+    var color = _STATUS_COLORS[stop.status] || '#4285f4';
     var marker = new google.maps.Marker({{
-      position: {{lat: lat, lng: lng}},
-      map: _OM_MAP,
-      icon: {{
-        path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-        scale: 5, fillColor: color, fillOpacity: 0.95,
-        strokeColor: '#fff', strokeWeight: 1.5,
-      }},
-      title: r.name,
+      position: {{lat: lat, lng: lng}}, map: _OM_MAP,
+      label: {{text: String(i + 1), color: '#fff', fontWeight: '700', fontSize: '12px'}},
+      icon: {{path: google.maps.SymbolPath.CIRCLE, scale: 14, fillColor: color,
+              fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2}},
+      title: stop.name || '',
     }});
+    var companyId = _OM_VENUE_TO_CO[stop.venue_id];
+    var profileLink = companyId
+      ? '<a href="/company/' + companyId + '" style="font-size:12px;color:#ea580c;font-weight:600;text-decoration:none">View full profile →</a>'
+      : '';
     var iw = new google.maps.InfoWindow({{
-      content: '<div style="font-family:system-ui;max-width:200px">' +
-               '<div style="font-weight:700;font-size:13px;margin-bottom:4px">' + esc(r.name) + '</div>' +
-               '<div style="font-size:11px;color:#64748b;margin-bottom:6px">' + r.days_overdue + 'd overdue</div>' +
-               (r.phone ? '<a href="tel:' + esc(r.phone) + '" style="font-size:12px;color:#3b82f6;text-decoration:none;display:block;margin-bottom:3px">\U0001f4de ' + esc(r.phone) + '</a>' : '') +
-               '<a href="/company/' + r.id + '" style="font-size:12px;color:#ea580c;font-weight:600;text-decoration:none">View details →</a>' +
+      content: '<div style="font-family:system-ui;max-width:220px">' +
+               '<div style="font-weight:700;font-size:13px;margin-bottom:4px">' + esc(stop.name || '(unnamed)') + '</div>' +
+               (stop.address ? '<div style="font-size:11px;color:#64748b;margin-bottom:6px">' + esc(stop.address) + '</div>' : '') +
+               '<div style="font-size:11px;color:' + color + ';font-weight:600;margin-bottom:6px">Stop ' + (i + 1) + ' • ' + esc(stop.status || 'Pending') + '</div>' +
+               profileLink +
                '</div>',
     }});
     marker.addListener('click', function() {{ iw.open(_OM_MAP, marker); }});
@@ -290,14 +309,15 @@ function plotRows() {{
     bounds.extend(marker.getPosition());
     plotted++;
   }});
-  document.getElementById('om-msg').textContent =
-    plotted + ' pin' + (plotted === 1 ? '' : 's') + ' (of ' + _OM_ROWS.length + ' overdue companies) have coordinates';
+  var sub = document.getElementById('om-sub');
+  if (sub && _OM_ROUTE) sub.textContent = (_OM_ROUTE.name || 'Your route') + ' • ' + plotted + ' stop' + (plotted === 1 ? '' : 's');
+  document.getElementById('om-msg').textContent = '';
   if (plotted > 0) {{
-    _OM_MAP.fitBounds(bounds, 40);
+    _OM_MAP.fitBounds(bounds, 60);
     if (_OM_MAP.getZoom() > 14) _OM_MAP.setZoom(14);
   }}
 }}
 
 loadOM();
 """
-    return _mobile_page('m_outreach_map', 'Outreach Map', body, js, br, bt, user=user)
+    return _mobile_page('m_outreach_map', 'Route Map', body, js, br, bt, user=user)

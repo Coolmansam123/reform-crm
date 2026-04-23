@@ -756,6 +756,15 @@ _GFR_FORM2_HTML = (
     '<div class="gfr-draft-bar" id="gfr-draft-s2">Draft restored <span style="flex:1"></span><button class="gfr-draft-clear" onclick="clearDraft(\'s2\')">Clear</button></div>'
     '<div class="gfr-form-body" id="gfr-body-s2">'
 
+    # -- Event toggle ------------------------------------------------------
+    '<div class="gfr-section" style="padding-top:4px">'
+    '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600">'
+    '<input type="checkbox" id="s2-has-event" onchange="s2ToggleEvent()" style="width:18px;height:18px;cursor:pointer">'
+    '<span>Is there an event here?</span>'
+    '</label>'
+    '<div style="font-size:12px;color:var(--text3);margin-top:4px;margin-left:28px">Check to capture event details (type, date, venue, etc.)</div>'
+    '</div>'
+
     # -- Interaction Details (always visible, the core of every submission) --
     '<div class="gfr-section">'
     '<div class="gfr-section-title">Interaction Details</div>'
@@ -781,15 +790,6 @@ _GFR_FORM2_HTML = (
     '</div>'
     '<div class="gfr-field"><label class="gfr-label">What happened? <span class="req">*</span></label>'
     '<textarea class="gfr-textarea" id="s2-int-summary" placeholder="Describe the interaction\u2026"></textarea></div>'
-    '</div>'
-
-    # -- Event toggle ------------------------------------------------------
-    '<div class="gfr-section" style="padding-top:4px">'
-    '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;font-weight:600">'
-    '<input type="checkbox" id="s2-has-event" onchange="s2ToggleEvent()" style="width:18px;height:18px;cursor:pointer">'
-    '<span>Is there an event here?</span>'
-    '</label>'
-    '<div style="font-size:12px;color:var(--text3);margin-top:4px;margin-left:28px">Check to capture event details (type, date, venue, etc.)</div>'
     '</div>'
 
     # -- Event block (hidden by default, shown when checkbox is on) --------
