@@ -4,10 +4,59 @@ import os
 
 from hub.shared import (
     _mobile_page, _is_admin,
-    T_GOR_VENUES, T_GOR_ACTS, T_GOR_BOXES, T_COMPANIES,
+    T_GOR_VENUES, T_GOR_ACTS, T_GOR_BOXES, T_COMPANIES, T_EVENTS,
 )
 from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
 from hub.contact_detail import contact_actions_js
+
+
+# Capture-Lead modal. Rendered alongside GFR_EXTRA_HTML so position:fixed
+# escapes the mobile-wrap stacking context. Visually matches the gfr-overlay
+# modals used for Check In / event forms. Fields mirror the standalone
+# /lead page (field_rep/pages/lead.py) so the same /api/leads/capture
+# endpoint handles both surfaces.
+_LEAD_FORM_HTML = (
+    '<div class="gfr-overlay" id="gfr-form-lead" onclick="if(event.target===this)closeLeadForm()">'
+    '<div class="gfr-modal gfr-form-modal">'
+    '<div class="gfr-hdr">'
+    '<span class="gfr-hdr-title">\U0001f4cb Capture Lead</span>'
+    '<span class="gfr-hdr-user" id="gfr-user-lead"></span>'
+    '<button class="gfr-close" onclick="closeLeadForm()">&#xd7;</button>'
+    '</div>'
+    '<div class="gfr-form-body">'
+    '<div id="lf2-biz-hint" style="font-size:12px;color:var(--text3);margin:10px 0 12px;padding:8px 10px;background:var(--bg);border-radius:7px;border:1px solid var(--border);display:none"></div>'
+    '<div class="gfr-field"><label class="gfr-label">Name <span class="req">*</span></label>'
+    '<input type="text" class="gfr-input" id="lf2-name" placeholder="Full name"></div>'
+    '<div class="gfr-field"><label class="gfr-label">Phone <span class="req">*</span></label>'
+    '<input type="tel" class="gfr-input" id="lf2-phone" placeholder="(555) 123-4567"></div>'
+    '<div class="gfr-field"><label class="gfr-label">Email</label>'
+    '<input type="email" class="gfr-input" id="lf2-email" placeholder="email@example.com"></div>'
+    '<div class="gfr-field"><label class="gfr-label">Service Interested <span class="req">*</span></label>'
+    '<select class="gfr-select" id="lf2-service">'
+    '<option value="">Select a service…</option>'
+    '<option>Chiropractic Care</option><option>Massage Therapy</option>'
+    '<option>Health Screening</option><option>Injury Rehab</option><option>Other</option>'
+    '</select></div>'
+    '<div class="gfr-field"><label class="gfr-label">Event / Source</label>'
+    '<select class="gfr-select" id="lf2-event">'
+    '<option value="">No event (walk-in / field)</option>'
+    '</select></div>'
+    '<div class="gfr-field"><label class="gfr-label">Referred from company</label>'
+    '<input type="text" class="gfr-input" id="lf2-company" list="lf2-company-list" placeholder="Business name">'
+    '<datalist id="lf2-company-list"></datalist>'
+    '<div id="lf2-company-hint" style="font-size:11px;color:var(--text3);margin-top:4px;min-height:14px"></div>'
+    '</div>'
+    '<div class="gfr-field"><label class="gfr-label">Notes</label>'
+    '<textarea class="gfr-textarea" id="lf2-notes" rows="3" placeholder="Additional details…"></textarea></div>'
+    '<div id="lf2-status" style="font-size:12px;margin-top:6px;min-height:14px;text-align:center"></div>'
+    '</div>'
+    '<div class="gfr-footer">'
+    '<span class="gfr-spacer"></span>'
+    '<button class="gfr-btn-cancel" onclick="closeLeadForm()">Cancel</button>'
+    '<button class="gfr-btn-submit" id="lf2-submit" onclick="submitRouteLead()">Submit Lead</button>'
+    '</div>'
+    '</div></div>'
+)
 
 
 def _mobile_route_page(br: str, bt: str, user: dict = None,
@@ -503,15 +552,20 @@ function renderRouteSheet(stop) {{
   html += '<div id="rv-box-st-'+id+'" style="font-size:12px;text-align:center;min-height:14px"></div>';
   html += '</div></div>';
 
+  // Capture Lead — always available regardless of status
+  html += '<div style="padding:12px 16px 0">';
+  html += '<button onclick="openLeadFormForStop()" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer">\U0001f4cb Capture Lead</button>';
+  html += '</div>';
+
   // Check In / Skip / Didn't Get To buttons
   if (status === 'Pending') {{
-    html += '<div style="padding:16px;display:flex;gap:10px">';
+    html += '<div style="padding:12px 16px 16px;display:flex;gap:10px">';
     html += '<button onclick="routeCheckIn('+id+')" style="flex:1;background:#ea580c;color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer">Check In</button>';
     html += '<button onclick="routeSkip('+id+')" style="width:70px;background:var(--bg);color:var(--text2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;font-weight:600;cursor:pointer">Skip</button>';
     html += '<button onclick="routeNotReached('+id+')" style="width:70px;background:var(--bg);color:#ef4444;border:1px solid #ef444440;border-radius:10px;padding:14px;font-size:11px;font-weight:600;cursor:pointer;line-height:1.2">Didn\\\'t<br>Get To</button>';
     html += '</div>';
   }} else {{
-    html += '<div style="padding:16px"><button onclick="routeCheckInForm()" style="width:100%;background:#ea580c;color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer">Check In</button></div>';
+    html += '<div style="padding:12px 16px 16px"><button onclick="routeCheckInForm()" style="width:100%;background:#ea580c;color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer">Check In</button></div>';
   }}
 
   return html;
@@ -709,12 +763,16 @@ function routeCheckIn(stopId) {{
 
 function routeCheckInForm() {{
   if (!_rCurrentStop) return;
+  // Capture the stop BEFORE closing the sheet — closeRouteSheet() nulls
+  // _rCurrentStop, and reading .name on null in the setTimeout callback
+  // would throw and prevent the form from ever opening.
+  var stop = _rCurrentStop;
   closeRouteSheet();
   s2Reset();
   setTimeout(function() {{
     var el;
-    el = document.getElementById('s2-event-name'); if (el) el.value = _rCurrentStop.name || '';
-    el = document.getElementById('s2-addr');        if (el) el.value = _rCurrentStop.address || '';
+    el = document.getElementById('s2-event-name'); if (el) el.value = stop.name || '';
+    el = document.getElementById('s2-addr');        if (el) el.value = stop.address || '';
     document.getElementById('gfr-form-s2').classList.add('open');
   }}, 150);
 }}
@@ -785,10 +843,12 @@ async function markRouteStop(stopId, status, callback, reason) {{
 
 function scheduleRouteEvent(formType) {{
   if (!_rCurrentStop) return;
+  // Capture before closeRouteSheet() nulls _rCurrentStop.
+  var stop = _rCurrentStop;
   closeRouteSheet();
   openGFRForm(formType);
-  var name = _rCurrentStop.name || '';
-  var addr = _rCurrentStop.address || '';
+  var name = stop.name || '';
+  var addr = stop.address || '';
   setTimeout(function() {{
     ['s3','s4','s5'].forEach(function(p) {{
       var c = document.getElementById(p + '-company'); if (c && !c.value) c.value = name;
@@ -943,6 +1003,165 @@ function mRouteToggleLogForm() {{
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }}
 
+// ── Capture Lead (baked into the stop sheet) ────────────────────────────
+// Lookup tables populated once on page load. Mirrors what
+// field_rep/pages/lead.py does for the standalone /lead page.
+var _LEAD_COMPANIES = {{}};  // lowercased name -> company id
+var _LEAD_EVENTS_LOADED = false;
+
+async function _loadLeadLookups() {{
+  // Events for the "Event / Source" dropdown
+  try {{
+    var evts = await fetchAll({T_EVENTS});
+    evts.sort(function(a,b) {{ return (b['Event Date']||'').localeCompare(a['Event Date']||''); }});
+    var sel = document.getElementById('lf2-event');
+    if (sel) {{
+      evts.forEach(function(e) {{
+        var nm = e['Name'] || '(unnamed)';
+        var dt = e['Event Date'] || '';
+        var st = e['Event Status'];
+        if (typeof st === 'object' && st) st = st.value || '';
+        var opt = document.createElement('option');
+        opt.value = e.id;
+        opt.textContent = nm + (dt ? ' (' + dt + ')' : '') + (st ? ' - ' + st : '');
+        sel.appendChild(opt);
+      }});
+      _LEAD_EVENTS_LOADED = true;
+    }}
+  }} catch(e) {{ /* non-fatal */ }}
+  // Companies for the "Referred from company" autocomplete
+  try {{
+    var rows = await fetchAll({T_COMPANIES});
+    var dl = document.getElementById('lf2-company-list');
+    rows.sort(function(a, b) {{ return (a.Name || '').localeCompare(b.Name || ''); }});
+    rows.forEach(function(c) {{
+      if (!c.Name) return;
+      _LEAD_COMPANIES[c.Name.trim().toLowerCase()] = c.id;
+      var opt = document.createElement('option');
+      opt.value = c.Name;
+      if (dl) dl.appendChild(opt);
+    }});
+  }} catch(e) {{ /* non-fatal */ }}
+}}
+
+function _leadResolveCompanyId(name) {{
+  name = (name || '').trim().toLowerCase();
+  return name ? (_LEAD_COMPANIES[name] || null) : null;
+}}
+
+// Wire the company-name hint (match / no-match) once the element is present
+(function() {{
+  var tries = 0;
+  var iv = setInterval(function() {{
+    var inp = document.getElementById('lf2-company');
+    var hint = document.getElementById('lf2-company-hint');
+    if (!inp || !hint) {{ if (++tries > 40) clearInterval(iv); return; }}
+    clearInterval(iv);
+    inp.addEventListener('input', function() {{
+      var v = inp.value.trim();
+      if (!v) {{ hint.textContent = ''; return; }}
+      var id = _leadResolveCompanyId(v);
+      if (id) {{
+        hint.style.color = '#059669';
+        hint.textContent = '✓ Match found — this lead will be linked to the company.';
+      }} else {{
+        hint.style.color = 'var(--text3)';
+        hint.textContent = 'No exact match (saved as free-text source).';
+      }}
+    }});
+  }}, 100);
+}})();
+
+function openLeadFormForStop() {{
+  var stop = _rCurrentStop;
+  if (!stop) return;
+  // Capture before closing the sheet (closeRouteSheet nulls _rCurrentStop).
+  var bizName = stop.name || '';
+  closeRouteSheet();
+  // Reset form fields
+  ['lf2-name','lf2-phone','lf2-email','lf2-notes'].forEach(function(id) {{
+    var el = document.getElementById(id); if (el) el.value = '';
+  }});
+  ['lf2-service','lf2-event'].forEach(function(id) {{
+    var el = document.getElementById(id); if (el) el.selectedIndex = 0;
+  }});
+  var st = document.getElementById('lf2-status'); if (st) st.textContent = '';
+  var btn = document.getElementById('lf2-submit');
+  if (btn) {{ btn.disabled = false; btn.textContent = 'Submit Lead'; }}
+  // Prefill business / referring company + show the hint banner
+  var compInp = document.getElementById('lf2-company');
+  if (compInp) {{
+    compInp.value = bizName;
+    // Trigger the input listener to compute the match badge
+    compInp.dispatchEvent(new Event('input'));
+  }}
+  var hintBar = document.getElementById('lf2-biz-hint');
+  if (hintBar) {{
+    hintBar.style.display = 'block';
+    hintBar.textContent = 'Capturing a lead from: ' + bizName;
+  }}
+  var userLbl = document.getElementById('gfr-user-lead');
+  if (userLbl) userLbl.textContent = GFR_USER;
+  // Open the overlay
+  setTimeout(function() {{
+    document.getElementById('gfr-form-lead').classList.add('open');
+  }}, 120);
+}}
+
+function closeLeadForm() {{
+  var el = document.getElementById('gfr-form-lead');
+  if (el) el.classList.remove('open');
+}}
+
+async function submitRouteLead() {{
+  var name    = (document.getElementById('lf2-name').value    || '').trim();
+  var phone   = (document.getElementById('lf2-phone').value   || '').trim();
+  var email   = (document.getElementById('lf2-email').value   || '').trim();
+  var service = document.getElementById('lf2-service').value;
+  var eventId = document.getElementById('lf2-event').value;
+  var notes   = (document.getElementById('lf2-notes').value   || '').trim();
+  var compNm  = (document.getElementById('lf2-company').value || '').trim();
+  var st = document.getElementById('lf2-status');
+  var btn = document.getElementById('lf2-submit');
+
+  if (!name || !phone) {{
+    st.style.color = '#ef4444'; st.textContent = 'Name and phone are required'; return;
+  }}
+  if (!service) {{
+    st.style.color = '#ef4444'; st.textContent = 'Please select a service'; return;
+  }}
+  btn.disabled = true; btn.textContent = 'Saving…';
+  st.textContent = '';
+  try {{
+    var r = await fetch('/api/leads/capture', {{
+      method: 'POST',
+      headers: {{'Content-Type':'application/json'}},
+      body: JSON.stringify({{
+        name: name, phone: phone, email: email,
+        service: service,
+        event_id: eventId ? parseInt(eventId) : null,
+        notes: notes,
+        company_id: _leadResolveCompanyId(compNm),
+      }})
+    }});
+    var d = await r.json();
+    if (d.ok) {{
+      st.style.color = '#059669';
+      st.textContent = '✓ Lead captured!';
+      setTimeout(closeLeadForm, 1100);
+    }} else {{
+      st.style.color = '#ef4444';
+      st.textContent = 'Failed: ' + (d.error || 'unknown');
+      btn.disabled = false; btn.textContent = 'Submit Lead';
+    }}
+  }} catch(e) {{
+    st.style.color = '#ef4444';
+    st.textContent = 'Error: ' + e.message;
+    btn.disabled = false; btn.textContent = 'Submit Lead';
+  }}
+}}
+
+_loadLeadLookups();
 loadRoute();
 """
     admin = _is_admin(user or {})
@@ -955,4 +1174,4 @@ loadRoute();
         + route_js
     )
     return _mobile_page('m_route', 'My Route', body, script_js, br, bt, user=user, wrap_cls='map-mode',
-                         extra_html=GFR_EXTRA_HTML, extra_js=GFR_EXTRA_JS)
+                         extra_html=GFR_EXTRA_HTML + _LEAD_FORM_HTML, extra_js=GFR_EXTRA_JS)
