@@ -1,17 +1,27 @@
 """Company detail page + directory list."""
 
+import os
+
 from hub.shared import (
     _mobile_page,
-    T_COMPANIES,
+    T_COMPANIES, T_LEADS, T_ACTIVITIES, T_GOR_BOXES,
 )
+from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
+from hub.lead_capture_ui import LEAD_CAPTURE_HTML, build_lead_capture_js
 
 
 def _mobile_company_detail_page(br: str, bt: str, company_id: int,
                                  user: dict = None) -> str:
-    """Mobile-sized view of a single Company row + its activity feed, with an
-    inline 'Log activity' form. POSTs to /api/companies/{id}/activities."""
+    """Mobile-sized view of a single Company row. Tabs: Info / Leads /
+    Events / Boxes (Boxes only when category='guerilla' and the Company has
+    a linked venue). Info tab carries a ~180px mini-map pinned on the
+    business, a Google-rating row, the meta card, visit history, and the
+    existing 'Log activity' flow."""
     user = user or {}
+    user_name = user.get('name', '')
+    gk = os.environ.get("GOOGLE_MAPS_API_KEY", "")
     body = (
+        # Header
         '<div class="mobile-hdr">'
         '<button class="m-hamburger" onclick="goBack()" aria-label="Back" '
         'style="margin-right:10px">←</button>'
@@ -20,17 +30,60 @@ def _mobile_company_detail_page(br: str, bt: str, company_id: int,
         '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div class="mobile-body">'
-        '<div id="cd-meta" style="margin-bottom:14px"></div>'
-        # Quick-log activity button
+        # Stats strip
+        '<div class="stats-row" id="cd-stats" style="margin-bottom:12px"></div>'
+        # Tab bar
+        '<div class="m-tabs" id="cd-tabs" style="margin-bottom:14px"></div>'
+        # Info panel
+        '<div class="m-panel active" id="cd-panel-info">'
+        '<div id="cd-map-wrap" style="display:none;margin-bottom:14px">'
+        '<div id="cd-map" style="height:180px;border-radius:10px;overflow:hidden;border:1px solid var(--border)"></div>'
+        '</div>'
+        '<div id="cd-rating" style="display:none;margin-bottom:10px"></div>'
+        '<div id="cd-meta" style="margin-bottom:16px"></div>'
+        '<div class="mobile-section-lbl" style="margin-bottom:8px">Visit History</div>'
+        '<div id="cd-visits" style="margin-bottom:16px"><div class="loading">Loading…</div></div>'
         '<button onclick="openLogModal()" '
         'style="width:100%;padding:12px;background:#ea580c;color:#fff;border:none;border-radius:10px;'
-        'font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:16px">'
+        'font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">'
         '+ Log activity</button>'
-        # Activity feed
-        '<div class="mobile-section-lbl">Recent activity</div>'
-        '<div id="cd-feed"><div class="loading">Loading…</div></div>'
         '</div>'
-        # Log-activity modal
+        # Leads panel
+        '<div class="m-panel" id="cd-panel-leads">'
+        '<button id="cd-leads-capture-btn" onclick="openLeadCaptureForCompany()" '
+        'style="width:100%;padding:12px;background:#ea580c;color:#fff;border:none;border-radius:10px;'
+        'font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:12px">'
+        '+ Capture Lead</button>'
+        '<div id="cd-leads"><div class="loading">Loading…</div></div>'
+        '</div>'
+        # Events panel
+        '<div class="m-panel" id="cd-panel-events">'
+        '<div class="mobile-section-lbl" style="margin-bottom:8px">Schedule Event</div>'
+        '<div style="display:grid;gap:8px;margin-bottom:14px">'
+        '<button onclick="scheduleCompanyEvent(\'Mobile Massage Service\')" '
+        'style="width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);'
+        'border-radius:8px;padding:12px 16px;font-size:14px;font-weight:600;cursor:pointer;'
+        'min-height:48px;text-align:left;font-family:inherit">\U0001f486 Mobile Massage</button>'
+        '<button onclick="scheduleCompanyEvent(\'Lunch and Learn\')" '
+        'style="width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);'
+        'border-radius:8px;padding:12px 16px;font-size:14px;font-weight:600;cursor:pointer;'
+        'min-height:48px;text-align:left;font-family:inherit">\U0001f37d️ Lunch & Learn</button>'
+        '<button onclick="scheduleCompanyEvent(\'Health Assessment Screening\')" '
+        'style="width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);'
+        'border-radius:8px;padding:12px 16px;font-size:14px;font-weight:600;cursor:pointer;'
+        'min-height:48px;text-align:left;font-family:inherit">\U0001fa7a Health Assessment</button>'
+        '</div>'
+        '<div class="mobile-section-lbl" style="margin-bottom:8px">Event History</div>'
+        '<div id="cd-events"><div class="loading">Loading…</div></div>'
+        '</div>'
+        # Boxes panel (rendered only for guerilla-linked companies; tab button
+        # is also conditional)
+        '<div class="m-panel" id="cd-panel-boxes">'
+        '<div id="cd-boxes"><div class="loading">Loading…</div></div>'
+        '<div id="cd-box-form"></div>'
+        '</div>'
+        '</div>'  # end mobile-body
+        # Log-activity modal (unchanged from previous flat page)
         '<div id="cd-modal-bg" onclick="if(event.target===this)closeLogModal()" '
         'style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:900;'
         'align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto">'
@@ -82,7 +135,16 @@ def _mobile_company_detail_page(br: str, bt: str, company_id: int,
     )
     js = f"""
 const COMPANY_ID = {int(company_id)};
+const CGK = {repr(gk)};
+const T_LEADS_TID = {int(T_LEADS)};
+const T_GOR_BOXES_TID = {int(T_GOR_BOXES)};
+
 let _COMPANY = null;
+let _ACTS = [];
+let _LEADS_ALL = [];
+let _BOXES_ALL = [];
+let _cMap = null;
+let _cMarker = null;
 
 var CAT_META = {{
   attorney:  {{label: 'Attorney',  color: '#7c3aed'}},
@@ -120,28 +182,185 @@ function goBack() {{
   }}
 }}
 
-function renderCompany() {{
+// Minimal fetchAll — companies/activities come from dedicated endpoints,
+// leads & boxes are pulled once from the generic table endpoint.
+async function fetchAllTid(tid) {{
+  try {{
+    var r = await fetch('/api/data/' + tid);
+    if (!r.ok) return [];
+    return await r.json();
+  }} catch (e) {{ return []; }}
+}}
+
+// ── Tab switching ────────────────────────────────────────────────────────
+function cTab(el, panelId) {{
+  document.querySelectorAll('#cd-tabs .m-tab').forEach(function(t) {{ t.classList.remove('active'); }});
+  document.querySelectorAll('.m-panel').forEach(function(p) {{ p.classList.remove('active'); }});
+  el.classList.add('active');
+  var panel = document.getElementById(panelId);
+  if (panel) panel.classList.add('active');
+  // Re-trigger a resize when the Info tab becomes visible so the map
+  // re-lays-out if it was hidden at init time.
+  if (panelId === 'cd-panel-info' && _cMap && window.google && window.google.maps) {{
+    setTimeout(function() {{ google.maps.event.trigger(_cMap, 'resize'); }}, 80);
+  }}
+}}
+
+function _catInfo(c) {{
+  var cat = (svJS(c.Category) || 'other').toLowerCase();
+  return CAT_META[cat] || CAT_META.other;
+}}
+
+function _isGuerillaWithVenue(c) {{
+  var cat = (svJS(c.Category) || '').toLowerCase();
+  var src = svJS(c['Legacy Source']);
+  return cat === 'guerilla' && src === 'guerilla_venue' && !!c['Legacy ID'];
+}}
+
+// ── Render: header + sub ─────────────────────────────────────────────────
+function renderHeader() {{
   var c = _COMPANY;
   var name = c.Name || '(unnamed)';
-  var cat = (svJS(c.Category) || 'other').toLowerCase();
-  var meta = CAT_META[cat] || CAT_META.other;
+  var meta = _catInfo(c);
   document.title = name + ' — Reform';
   document.getElementById('cd-name').textContent = name;
   document.getElementById('cd-sub').innerHTML =
     '<span style="background:' + meta.color + '22;color:' + meta.color + ';font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px">' +
     esc(meta.label) + '</span>' +
     (svJS(c['Contact Status']) ? '<span style="font-size:11px;color:var(--text3);margin-left:8px">' + esc(svJS(c['Contact Status'])) + '</span>' : '');
+}}
 
+// ── Render: tab bar (Boxes is conditional) ───────────────────────────────
+function renderTabs() {{
+  var c = _COMPANY;
+  var showBoxes = _isGuerillaWithVenue(c);
+  var html = '';
+  html += '<div class="m-tab active" onclick="cTab(this,\\'cd-panel-info\\')">Info</div>';
+  html += '<div class="m-tab" onclick="cTab(this,\\'cd-panel-leads\\')">Leads</div>';
+  html += '<div class="m-tab" onclick="cTab(this,\\'cd-panel-events\\')">Events</div>';
+  if (showBoxes) {{
+    html += '<div class="m-tab" onclick="cTab(this,\\'cd-panel-boxes\\')">Boxes</div>';
+  }}
+  document.getElementById('cd-tabs').innerHTML = html;
+}}
+
+// ── Render: stats strip ──────────────────────────────────────────────────
+function renderStats() {{
+  var c = _COMPANY;
+  var nameKey = (c.Name || '').trim().toLowerCase();
+  var legacyId = c['Legacy ID'];
+  var leadsCt = _LEADS_ALL.filter(function(L) {{
+    var src = (L.Source || '').trim().toLowerCase();
+    return src && src === nameKey;
+  }}).length;
+  var eventsCt = (_ACTS || []).filter(function(a) {{ return !!svJS(a['Event Status']); }}).length;
+  var boxesCt = 0;
+  if (legacyId) {{
+    boxesCt = _BOXES_ALL.filter(function(b) {{
+      var lf = b.Business;
+      return Array.isArray(lf) && lf.some(function(r) {{ return r && r.id === legacyId; }});
+    }}).length;
+  }}
+  var last = '';
+  (_ACTS || []).forEach(function(a) {{
+    var d = a.Created || a.Date || '';
+    if (d && d > last) last = d;
+  }});
+  var lastChip = '—';
+  if (last) {{
+    var dt = new Date(last);
+    if (!isNaN(dt.getTime())) {{
+      var days = Math.floor((new Date() - dt) / 86400000);
+      lastChip = days <= 0 ? 'Today' : (days === 1 ? '1d ago' : (days + 'd ago'));
+    }}
+  }}
+  function chip(cls, label, value, muted) {{
+    var extra = muted ? ' style="opacity:.55"' : '';
+    return '<div class="stat-chip ' + cls + '"' + extra + '>' +
+             '<div class="label">' + esc(label) + '</div>' +
+             '<div class="value">' + esc(String(value)) + '</div>' +
+           '</div>';
+  }}
+  var html = '';
+  html += chip('c-blue', 'Leads', leadsCt, leadsCt === 0);
+  html += chip('c-yellow', 'Events', eventsCt, eventsCt === 0);
+  if (_isGuerillaWithVenue(c)) {{
+    html += chip('c-green', 'Boxes', boxesCt, boxesCt === 0);
+  }}
+  html += chip('c-blue', 'Last Visit', lastChip, lastChip === '—');
+  document.getElementById('cd-stats').innerHTML = html;
+}}
+
+// ── Info tab: map + rating + meta + visit history ────────────────────────
+function _initCompanyMap(lat, lng) {{
+  if (!CGK) return;
+  var color = _catInfo(_COMPANY).color;
+  function ready() {{
+    var el = document.getElementById('cd-map');
+    if (!el) return;
+    // Seed an explicit height before constructing the Map, or the div
+    // collapses to 0 and Google's tiles never render. Same trick route.py
+    // uses at line 145.
+    el.style.height = el.offsetHeight + 'px';
+    _cMap = new google.maps.Map(el, {{
+      center: {{lat: lat, lng: lng}}, zoom: 16,
+      mapTypeControl: false, streetViewControl: false,
+      styles: [{{featureType:'poi',stylers:[{{visibility:'off'}}]}},
+               {{featureType:'transit',stylers:[{{visibility:'off'}}]}}]
+    }});
+    _cMarker = new google.maps.Marker({{
+      position: {{lat: lat, lng: lng}}, map: _cMap,
+      icon: {{path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: color,
+              fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2}},
+      title: _COMPANY.Name || ''
+    }});
+  }}
+  if (window.google && window.google.maps) {{
+    ready();
+  }} else {{
+    window._cMapReady = ready;
+    var s = document.createElement('script');
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + CGK + '&callback=_cMapReady';
+    s.async = true; document.head.appendChild(s);
+  }}
+}}
+
+function renderInfoTab() {{
+  var c = _COMPANY;
+  // Map — only if lat+lng on the Company row resolve to numbers
+  var lat = parseFloat(c.Latitude);
+  var lng = parseFloat(c.Longitude);
+  var mapWrap = document.getElementById('cd-map-wrap');
+  if (!isNaN(lat) && !isNaN(lng)) {{
+    mapWrap.style.display = 'block';
+    _initCompanyMap(lat, lng);
+  }} else {{
+    mapWrap.style.display = 'none';
+  }}
+  // Rating row
+  var rating = c.Rating;
+  var reviews = c.Reviews;
+  var gmUrl = c['Google Maps URL'] || '';
+  var rEl = document.getElementById('cd-rating');
+  if (rating) {{
+    var rh = '<div style="padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:8px">' +
+             '<span style="font-size:15px">⭐</span>' +
+             '<span style="font-size:14px;font-weight:700">' + esc(rating) + '</span>';
+    if (reviews) rh += '<span style="font-size:12px;color:var(--text3)">(' + esc(reviews) + ' reviews)</span>';
+    if (gmUrl) rh += '<a href="' + esc(gmUrl) + '" target="_blank" style="margin-left:auto;color:#3b82f6;font-size:12px;text-decoration:none">View on Google ↗</a>';
+    rh += '</div>';
+    rEl.style.display = 'block';
+    rEl.innerHTML = rh;
+  }} else {{
+    rEl.style.display = 'none';
+  }}
+  // Meta card (preserved from prior layout)
   var phone = c.Phone || '';
   var email = c.Email || '';
   var addr  = c.Address || '';
   var site  = c.Website || '';
   var fu    = c['Follow-Up Date'] || '';
   var notes = c.Notes || '';
-
-  // Prefer the internal map view if we know the underlying guerilla venue id.
-  // Falls back to Google Maps for hub-only / community companies without a
-  // migrated venue row.
   var legacySrc = svJS(c['Legacy Source']);
   var legacyId  = c['Legacy ID'];
   var navUrl, navTarget;
@@ -161,54 +380,227 @@ function renderCompany() {{
   if (notes) html += '<div style="padding:10px 0 0;margin-top:8px;border-top:1px solid var(--border);font-size:12px;color:var(--text3);white-space:pre-wrap">' + esc(notes) + '</div>';
   html += '</div>';
   document.getElementById('cd-meta').innerHTML = html;
+  // Visit history (top 10 from the /activities endpoint response)
+  var visits = (_ACTS || []).slice(0, 10);
+  var vEl = document.getElementById('cd-visits');
+  if (!visits.length) {{
+    vEl.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0;text-align:center">No visits logged yet.</div>';
+  }} else {{
+    var vh = '';
+    visits.forEach(function(a) {{
+      var type  = svJS(a.Type) || '';
+      var summ  = a.Summary || '';
+      var when  = a.Created || a.Date || '';
+      var who   = a.Author || '';
+      vh += '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px">';
+      vh += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">';
+      if (type) vh += '<span style="background:#47556920;color:#475569;font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px">' + esc(type) + '</span>';
+      vh += '<span style="font-size:10px;color:var(--text3)">' + esc(fmtDate(when)) + (who ? ' · ' + esc(who.split('@')[0]) : '') + '</span>';
+      vh += '</div>';
+      if (summ) vh += '<div style="font-size:13px;color:var(--text2);white-space:pre-wrap">' + esc(summ) + '</div>';
+      vh += '</div>';
+    }});
+    vEl.innerHTML = vh;
+  }}
 }}
 
-function renderFeed(activities) {{
-  if (!activities || !activities.length) {{
-    document.getElementById('cd-feed').innerHTML =
-      '<div style="text-align:center;padding:24px 0;color:var(--text3);font-size:13px">No activity yet.</div>';
+// ── Leads tab ────────────────────────────────────────────────────────────
+function openLeadCaptureForCompany() {{
+  var name = (_COMPANY && _COMPANY.Name) || '';
+  openLeadCapture(name);  // from lead_capture_ui.py (injected via extra_js)
+}}
+
+function renderLeadsTab() {{
+  var c = _COMPANY;
+  var nameKey = (c.Name || '').trim().toLowerCase();
+  var leads = _LEADS_ALL.filter(function(L) {{
+    var src = (L.Source || '').trim().toLowerCase();
+    return src && src === nameKey;
+  }}).sort(function(a,b) {{ return (b.Created||'').localeCompare(a.Created||''); }});
+  var el = document.getElementById('cd-leads');
+  if (!leads.length) {{
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No leads captured from this business yet.</div>';
     return;
   }}
+  var stColors = {{
+    'New':'#3b82f6','Contacted':'#ea580c','Appointment Set':'#7c3aed',
+    'Patient Seen':'#0891b2','Converted':'#059669','Dropped':'#9ca3af'
+  }};
   var html = '';
-  activities.forEach(function(a) {{
-    var kind  = svJS(a.Kind) || 'activity';
-    var type  = svJS(a.Type) || '';
-    var summ  = a.Summary || '';
-    var when  = a.Created || a.Date || '';
-    var who   = a.Author || '';
-    var typeColor = '#475569';
-    html +=
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px">' +
-      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">' +
-      (type ? '<span style="background:' + typeColor + '20;color:' + typeColor + ';font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px">' + esc(type) + '</span>' : '') +
-      '<span style="font-size:10px;color:var(--text3)">' + esc(fmtDate(when)) + (who ? ' · ' + esc(who.split('@')[0]) : '') + '</span>' +
-      '</div>' +
-      '<div style="font-size:13px;color:var(--text2);white-space:pre-wrap">' + esc(summ) + '</div>' +
-      '</div>';
+  leads.forEach(function(L) {{
+    var nm = L.Name || '(no name)';
+    var ph = L.Phone || '';
+    var rs = svJS(L.Reason) || '';
+    var st = svJS(L.Status) || 'New';
+    var dt = (L.Created || '').slice(0,10);
+    var col = stColors[st] || '#6b7280';
+    var line2 = '';
+    if (ph) line2 += esc(ph);
+    if (rs) line2 += (line2 ? ' · ' : '') + esc(rs);
+    html += '<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
+    html += '<span style="font-weight:600">' + esc(nm) + '</span>';
+    html += '<span style="background:' + col + '22;color:' + col + ';font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap">' + esc(st) + '</span>';
+    html += '</div>';
+    if (line2) html += '<div style="color:var(--text2);font-size:12px;margin-top:2px">' + line2 + '</div>';
+    if (dt) html += '<div style="color:var(--text3);font-size:11px;margin-top:2px">' + esc(dt) + '</div>';
+    html += '</div>';
   }});
-  document.getElementById('cd-feed').innerHTML = html;
+  el.innerHTML = html;
 }}
 
+// ── Events tab ───────────────────────────────────────────────────────────
+function scheduleCompanyEvent(formType) {{
+  if (!_COMPANY) return;
+  var name = _COMPANY.Name || '';
+  var addr = _COMPANY.Address || '';
+  var phone = _COMPANY.Phone || '';
+  if (typeof openGFRForm !== 'function') {{
+    alert('Event form not ready yet. Please try again in a moment.');
+    return;
+  }}
+  openGFRForm(formType);
+  setTimeout(function() {{
+    ['s3','s4','s5'].forEach(function(p) {{
+      var el = document.getElementById(p + '-company'); if (el && !el.value) el.value = name;
+      var ad = document.getElementById(p + '-addr');    if (ad && !ad.value) ad.value = addr;
+      var ph = document.getElementById(p + '-phone');   if (ph && !ph.value) ph.value = phone;
+    }});
+  }}, 350);
+}}
+
+function renderEventsTab() {{
+  var events = (_ACTS || []).filter(function(a) {{ return !!svJS(a['Event Status']); }})
+                            .sort(function(a,b) {{ return (b.Created||'').localeCompare(a.Created||''); }});
+  var el = document.getElementById('cd-events');
+  if (!events.length) {{
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No events scheduled at this business yet.</div>';
+    return;
+  }}
+  var evColors = {{'Prospective':'#3b82f6','Approved':'#10b981','Scheduled':'#8b5cf6','Completed':'#64748b'}};
+  var html = '';
+  events.forEach(function(a) {{
+    var nm = a.Summary || svJS(a.Type) || 'Event';
+    var st = svJS(a['Event Status']) || '';
+    var dt = a.Date || (a.Created || '').slice(0,10);
+    var col = evColors[st] || '#6b7280';
+    html += '<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
+    html += '<span style="font-weight:600">' + esc(nm) + '</span>';
+    if (st) html += '<span style="background:' + col + '22;color:' + col + ';font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap">' + esc(st) + '</span>';
+    html += '</div>';
+    if (dt) html += '<div style="color:var(--text3);font-size:11px;margin-top:2px">' + esc(fmtDate(dt)) + '</div>';
+    html += '</div>';
+  }});
+  el.innerHTML = html;
+}}
+
+// ── Boxes tab (guerilla only) ────────────────────────────────────────────
+function renderBoxesTab() {{
+  var c = _COMPANY;
+  if (!_isGuerillaWithVenue(c)) return;  // tab button also absent
+  var legacyId = c['Legacy ID'];
+  var boxes = _BOXES_ALL.filter(function(b) {{
+    var lf = b.Business;
+    return Array.isArray(lf) && lf.some(function(r) {{ return r && r.id === legacyId; }});
+  }}).sort(function(a,b) {{ return (b['Date Placed']||'').localeCompare(a['Date Placed']||''); }});
+  var el = document.getElementById('cd-boxes');
+  if (!boxes.length) {{
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No boxes placed here yet.</div>';
+  }} else {{
+    var html = '';
+    boxes.forEach(function(b) {{
+      var loc = b.Location || '(unspecified)';
+      var st = svJS(b.Status) || 'Active';
+      var dp = b['Date Placed'] || '';
+      var pd = parseInt(b['Pickup Days']) || 14;
+      var stColor = st === 'Active' ? '#f59e0b' : (st === 'Picked Up' ? '#059669' : '#9ca3af');
+      html += '<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
+      html += '<span style="font-weight:600">\U0001f4e6 ' + esc(loc) + '</span>';
+      html += '<span style="background:' + stColor + '22;color:' + stColor + ';font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600">' + esc(st) + '</span>';
+      html += '</div>';
+      if (dp) html += '<div style="color:var(--text3);font-size:11px;margin-top:2px">Placed ' + esc(dp) + ' · pickup in ' + pd + ' days</div>';
+      html += '</div>';
+    }});
+    el.innerHTML = html;
+  }}
+  var formEl = document.getElementById('cd-box-form');
+  formEl.innerHTML =
+    '<hr style="border:none;border-top:1px solid var(--border);margin:12px 0">' +
+    '<div class="mobile-section-lbl" style="margin-bottom:8px">\U0001f4e6 Place New Box</div>' +
+    '<div style="display:grid;gap:8px">' +
+      '<input type="text" id="cd-box-loc" placeholder="Location (e.g. Front desk)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit">' +
+      '<input type="text" id="cd-box-contact" placeholder="Contact person" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit">' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+        '<span style="font-size:12px;color:var(--text3);white-space:nowrap">Pickup in</span>' +
+        '<input type="number" id="cd-box-days" value="14" min="1" max="90" style="width:60px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px;text-align:center;font-family:inherit">' +
+        '<span style="font-size:12px;color:var(--text3)">days</span>' +
+      '</div>' +
+      '<button onclick="placeCompanyBox(' + legacyId + ')" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:10px 14px;font-size:14px;font-weight:600;cursor:pointer;min-height:44px;font-family:inherit">Place Box</button>' +
+      '<div id="cd-box-st" style="font-size:12px;text-align:center;min-height:14px"></div>' +
+    '</div>';
+}}
+
+async function placeCompanyBox(venueId) {{
+  var loc = document.getElementById('cd-box-loc').value.trim();
+  var contact = document.getElementById('cd-box-contact').value.trim();
+  var daysEl = document.getElementById('cd-box-days');
+  var days = daysEl ? (parseInt(daysEl.value) || 14) : 14;
+  var st = document.getElementById('cd-box-st');
+  if (!loc) {{ alert('Please enter the box location.'); return; }}
+  st.textContent = 'Saving…'; st.style.color = 'var(--text3)';
+  try {{
+    var r = await fetch('/api/guerilla/boxes', {{
+      method: 'POST', headers: {{'Content-Type':'application/json'}},
+      body: JSON.stringify({{venue_id: venueId, location: loc, contact_person: contact, pickup_days: days}})
+    }});
+    var d = await r.json();
+    if (r.ok && d.ok) {{
+      st.style.color = '#059669'; st.textContent = 'Box placed ✓';
+      document.getElementById('cd-box-loc').value = '';
+      document.getElementById('cd-box-contact').value = '';
+      // Refresh underlying list so the new row shows up
+      _BOXES_ALL = await fetchAllTid(T_GOR_BOXES_TID);
+      renderStats();
+      renderBoxesTab();
+    }} else {{
+      st.style.color = '#ef4444'; st.textContent = 'Error: ' + (d.error || 'failed');
+    }}
+  }} catch(e) {{
+    st.style.color = '#ef4444'; st.textContent = 'Network error';
+  }}
+}}
+
+// ── Load orchestrator ────────────────────────────────────────────────────
 async function load() {{
-  var [cRes, aRes] = await Promise.all([
+  var [cRes, aRes, leads, boxes] = await Promise.all([
     fetch('/api/companies/' + COMPANY_ID),
     fetch('/api/companies/' + COMPANY_ID + '/activities'),
+    fetchAllTid(T_LEADS_TID),
+    fetchAllTid(T_GOR_BOXES_TID),
   ]);
   if (!cRes.ok) {{
     document.getElementById('cd-name').textContent = 'Not found';
     document.getElementById('cd-meta').innerHTML = '';
-    document.getElementById('cd-feed').innerHTML = '';
+    document.getElementById('cd-visits').innerHTML = '';
+    document.getElementById('cd-stats').innerHTML = '';
     return;
   }}
   _COMPANY = await cRes.json();
-  renderCompany();
-  if (aRes.ok) {{
-    var acts = await aRes.json();
-    renderFeed(acts);
-  }}
+  _ACTS = aRes.ok ? await aRes.json() : [];
+  _LEADS_ALL = leads || [];
+  _BOXES_ALL = boxes || [];
+  renderHeader();
+  renderTabs();
+  renderStats();
+  renderInfoTab();
+  renderLeadsTab();
+  renderEventsTab();
+  renderBoxesTab();
 }}
 
-// ── Log activity modal ──
+// ── Log-activity modal (unchanged flow) ──────────────────────────────────
 function openLogModal() {{
   document.getElementById('cd-summary').value = '';
   document.getElementById('cd-fu').value = '';
@@ -246,7 +638,7 @@ async function submitLog() {{
   }});
   if (r.ok) {{
     closeLogModal();
-    await load();  // re-render with new activity
+    await load();
   }} else {{
     var err = '';
     try {{ err = (await r.json()).error || ''; }} catch(e) {{}}
@@ -259,7 +651,16 @@ async function submitLog() {{
 
 load();
 """
-    return _mobile_page('m_directory', 'Company', body, js, br, bt, user=user)
+    script_js = (
+        f"const GFR_USER = {repr(user_name)};\n"
+        f"const TOOL = {{venuesT: {int(T_COMPANIES)}}};\n"
+        + js
+    )
+    return _mobile_page(
+        'm_directory', 'Company', body, script_js, br, bt, user=user,
+        extra_html=GFR_EXTRA_HTML + LEAD_CAPTURE_HTML,
+        extra_js=GFR_EXTRA_JS + '\n' + build_lead_capture_js(),
+    )
 
 
 
