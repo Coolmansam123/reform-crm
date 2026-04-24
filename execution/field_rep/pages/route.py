@@ -40,12 +40,29 @@ def _mobile_route_page(br: str, bt: str, user: dict = None,
         '<div style="margin-top:6px;background:var(--border);border-radius:4px;height:5px;overflow:hidden">'
         '<div id="rt-bar" style="height:100%;background:#ea580c;border-radius:4px;width:0%"></div>'
         '</div>'
+        '<div id="rt-actions" style="margin-top:8px;display:none;gap:8px;flex-wrap:wrap">'
+        '<a href="#" onclick="openFullDirections();return false" '
+        'style="display:inline-block;padding:7px 12px;background:#ea580c;color:#fff;'
+        'border-radius:8px;font-size:12px;font-weight:700;text-decoration:none">'
+        '\U0001f9ed Open in Google Maps</a>'
+        '<a href="#" onclick="openDirectionsSheet();return false" '
+        'style="display:inline-block;padding:7px 12px;background:var(--bg3);color:var(--text);'
+        'border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;'
+        'text-decoration:none;margin-left:6px">'
+        '\U0001f4cb Turn-by-turn</a>'
         '</div>'
-        # Bottom sheet (same pattern as mobile map)
+        '</div>'
+        # Stop bottom sheet (tap a marker)
         '<div class="m-sheet-backdrop" id="m-backdrop" onclick="closeRouteSheet()"></div>'
         '<div class="m-sheet" id="m-sheet">'
         '<div class="m-sheet-handle" onclick="closeRouteSheet()"></div>'
         '<div id="m-sheet-body" style="padding:0 0 20px"></div>'
+        '</div>'
+        # Turn-by-turn directions sheet (tap the button)
+        '<div class="m-sheet-backdrop" id="d-backdrop" onclick="closeDirectionsSheet()"></div>'
+        '<div class="m-sheet" id="d-sheet">'
+        '<div class="m-sheet-handle" onclick="closeDirectionsSheet()"></div>'
+        '<div id="d-sheet-body" style="padding:0 0 20px"></div>'
         '</div>'
     )
     route_js = f"""
@@ -57,6 +74,7 @@ const _GOFF_LAT = 33.9478, _GOFF_LNG = -118.1335;
 const _STATUS_COLORS = {{'Pending':'#4285f4','Visited':'#059669','Skipped':'#f97316','Not Reached':'#ef4444'}};
 var _routeData = null, _rMap = null, _rMarkers = {{}}, _rPolyline = null, _rOfficeMarker = null;
 var _rDirections = null;  // DirectionsRenderer for street-following polyline
+var _rLastDirections = null;  // cached DirectionsResult for turn-by-turn sheet
 var _rCurrentStop = null;  // currently selected stop (full venue data)
 var _userLat = null, _userLng = null, _userMarker = null;
 var _allBoxesCache = null;  // cached boxes for pickup badges
@@ -123,16 +141,21 @@ function updateProgress() {{
   // Total route distance (office → stop 1 → stop 2 → ...)
   var totalDist = 0;
   var prevLat = _GOFF_LAT, prevLng = _GOFF_LNG;
+  var anyStop = false;
   stops.forEach(function(s) {{
     var sLat = parseFloat(s.lat), sLng = parseFloat(s.lng);
     if (sLat && sLng) {{
       totalDist += _haversine(prevLat, prevLng, sLat, sLng);
       prevLat = sLat; prevLng = sLng;
+      anyStop = true;
     }}
   }});
+  if (anyStop) totalDist += _haversine(prevLat, prevLng, _GOFF_LAT, _GOFF_LNG);
   if (totalDist > 0) summary += ' \u2022 ' + totalDist.toFixed(1) + ' mi total';
   document.getElementById('rt-count').textContent = summary;
   document.getElementById('rt-bar').style.width = pct + '%';
+  var actionsEl = document.getElementById('rt-actions');
+  if (actionsEl) actionsEl.style.display = anyStop ? 'flex' : 'none';
 }}
 
 function initRouteMap() {{
@@ -164,6 +187,7 @@ function renderRouteStops() {{
   if (_rOfficeMarker) {{ _rOfficeMarker.setMap(null); _rOfficeMarker = null; }}
   if (_rPolyline) {{ _rPolyline.setMap(null); _rPolyline = null; }}
   if (_rDirections) {{ _rDirections.setMap(null); _rDirections = null; }}
+  _rLastDirections = null;
   var stops = _routeData.stops || [];
   var bounds = new google.maps.LatLngBounds();
   var pathCoords = [];
@@ -196,7 +220,9 @@ function renderRouteStops() {{
     (function(s) {{ marker.addListener('click', function() {{ openRouteSheet(s); }}); }})(stop);
     _rMarkers[stop.stop_id] = marker;
   }});
+  // Close the loop: return to office at the end of the route.
   if (pathCoords.length > 1) {{
+    pathCoords.push(officePos);
     _drawDirectionsOrFallback(pathCoords);
   }}
   if (pathCoords.length) {{
@@ -240,12 +266,110 @@ function _drawDirectionsOrFallback(pathCoords) {{
   }}, function(res, status) {{
     if (status === 'OK') {{
       _rDirections.setDirections(res);
+      _rLastDirections = res;
     }} else {{
       console.log('[route] directions failed (' + status + '); falling back to straight-line');
       if (_rDirections) {{ _rDirections.setMap(null); _rDirections = null; }}
+      _rLastDirections = null;
       straightLine();
     }}
   }});
+}}
+
+// Hands off the full route to Google Maps for turn-by-turn directions:
+// office -> each stop in order -> office. Google's /maps/dir/?api=1 URL
+// supports up to 9 intermediate waypoints; if the route has more stops we
+// silently truncate to the first 9 (the polyline on the page still shows
+// all of them via the Directions API which allows 23).
+function openFullDirections() {{
+  if (!_routeData || !_routeData.stops || !_routeData.stops.length) return;
+  var office = _GOFF_LAT + ',' + _GOFF_LNG;
+  var waypoints = _routeData.stops.map(function(s) {{
+    var lat = parseFloat(s.lat), lng = parseFloat(s.lng);
+    return (lat && lng) ? (lat + ',' + lng) : null;
+  }}).filter(Boolean);
+  if (!waypoints.length) return;
+  if (waypoints.length > 9) {{
+    console.log('[route] >9 stops; Google Maps URL truncated to first 9');
+    waypoints = waypoints.slice(0, 9);
+  }}
+  var url = 'https://www.google.com/maps/dir/?api=1'
+    + '&origin=' + encodeURIComponent(office)
+    + '&destination=' + encodeURIComponent(office)
+    + '&waypoints=' + encodeURIComponent(waypoints.join('|'))
+    + '&travelmode=driving';
+  window.open(url, '_blank');
+}}
+
+// Turn-by-turn sheet: each leg (office -> stop 1, stop 1 -> stop 2, ...,
+// last stop -> office) is a collapsible header showing distance/duration;
+// tapping expands to reveal Google's step-by-step instructions for that leg.
+function openDirectionsSheet() {{
+  var body = document.getElementById('d-sheet-body');
+  var stops = (_routeData && _routeData.stops) || [];
+  if (!_rLastDirections || !_rLastDirections.routes || !_rLastDirections.routes[0]) {{
+    body.innerHTML = '<div style="padding:24px 18px;color:var(--text3);font-size:13px;text-align:center">'
+      + 'Turn-by-turn directions are not available for this route yet.<br><br>'
+      + 'This usually means the Directions API fell back to a straight line '
+      + '(too many stops, or the API call failed). Use <b>Open in Google Maps</b> '
+      + 'for full turn-by-turn.</div>';
+  }} else {{
+    var legs = _rLastDirections.routes[0].legs || [];
+    var html = '<div style="padding:16px 18px 10px;border-bottom:1px solid var(--border)">';
+    html += '<div style="font-size:16px;font-weight:700">Turn-by-turn</div>';
+    html += '<div style="font-size:12px;color:var(--text3);margin-top:3px">Tap a leg to expand</div>';
+    html += '</div>';
+    legs.forEach(function(leg, i) {{
+      // Leg i goes from stop i-1 (or office) to stop i (or office).
+      var fromName = (i === 0) ? 'Reform Office'
+        : ((stops[i-1] && stops[i-1].name) || ('Stop ' + i));
+      var toName = (i === legs.length - 1) ? 'Reform Office'
+        : ((stops[i] && stops[i].name) || ('Stop ' + (i+1)));
+      var dist = (leg.distance && leg.distance.text) || '';
+      var dur = (leg.duration && leg.duration.text) || '';
+      html += '<div style="border-bottom:1px solid var(--border)">';
+      html += '<div onclick="toggleLeg(' + i + ')" style="padding:12px 18px;cursor:pointer;display:flex;justify-content:space-between;align-items:center">';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="font-size:14px;font-weight:600">' + esc(fromName) + ' → ' + esc(toName) + '</div>';
+      html += '<div style="font-size:12px;color:var(--text3);margin-top:2px">' + esc(dist) + (dur ? ' · ' + esc(dur) : '') + '</div>';
+      html += '</div>';
+      html += '<div id="d-chev-' + i + '" style="font-size:14px;color:var(--text3);margin-left:10px">▾</div>';
+      html += '</div>';
+      html += '<div id="d-steps-' + i + '" style="display:none;padding:0 18px 12px">';
+      (leg.steps || []).forEach(function(step, j) {{
+        var sDist = (step.distance && step.distance.text) || '';
+        html += '<div style="padding:8px 0;border-top:1px solid var(--border);display:flex;gap:10px">';
+        html += '<div style="color:var(--text3);font-size:12px;min-width:22px">' + (j+1) + '.</div>';
+        html += '<div style="flex:1">';
+        // instructions is HTML from Google (e.g. "Turn <b>right</b> onto ...")
+        html += '<div style="font-size:13px;line-height:1.4">' + (step.instructions || '') + '</div>';
+        if (sDist) html += '<div style="font-size:11px;color:var(--text3);margin-top:3px">' + esc(sDist) + '</div>';
+        html += '</div></div>';
+      }});
+      html += '</div></div>';
+    }});
+    body.innerHTML = html;
+  }}
+  document.getElementById('d-sheet').classList.add('open');
+  document.getElementById('d-backdrop').classList.add('open');
+}}
+
+function closeDirectionsSheet() {{
+  document.getElementById('d-sheet').classList.remove('open');
+  document.getElementById('d-backdrop').classList.remove('open');
+}}
+
+function toggleLeg(idx) {{
+  var steps = document.getElementById('d-steps-' + idx);
+  var chev = document.getElementById('d-chev-' + idx);
+  if (!steps) return;
+  if (steps.style.display === 'none') {{
+    steps.style.display = 'block';
+    if (chev) chev.textContent = '▴';
+  }} else {{
+    steps.style.display = 'none';
+    if (chev) chev.textContent = '▾';
+  }}
 }}
 
 function closeRouteSheet() {{
