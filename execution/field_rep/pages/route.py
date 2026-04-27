@@ -31,8 +31,8 @@ def _mobile_route_page(br: str, bt: str, user: dict = None,
         '<div style="background:var(--bg2);border-radius:16px;padding:28px 36px;box-shadow:0 4px 20px rgba(0,0,0,.3)">'
         '<div style="font-size:18px;font-weight:700;color:var(--text)">No Active Routes</div>'
         '</div></div>'
-        # Progress bar overlay at top
-        '<div id="rt-progress" style="position:fixed;top:0;left:0;right:0;z-index:110;background:var(--bg2);padding:10px 16px;border-bottom:1px solid var(--border);display:none">'
+        # Progress bar overlay at top — pad for iOS notch/Dynamic Island in standalone PWA mode
+        '<div id="rt-progress" style="position:fixed;top:0;left:0;right:0;z-index:110;background:var(--bg2);padding:calc(10px + env(safe-area-inset-top)) 16px 10px;border-bottom:1px solid var(--border);display:none">'
         '<div style="display:flex;justify-content:space-between;align-items:center">'
         '<div id="rt-name" style="font-size:14px;font-weight:700"></div>'
         '<a href="/routes" style="font-size:12px;color:var(--text3);text-decoration:none">\u2190 Routes</a>'
@@ -66,7 +66,8 @@ def _mobile_route_page(br: str, bt: str, user: dict = None,
         '<div id="d-sheet-body" style="padding:0 0 20px"></div>'
         '</div>'
         # Privacy indicator (location only shared while on route)
-        '<div id="loc-pill" style="display:none;position:fixed;left:10px;bottom:10px;z-index:90;'
+        # Lift above the iOS home-indicator safe area when in standalone PWA mode
+        '<div id="loc-pill" style="display:none;position:fixed;left:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:90;'
         'background:rgba(15,23,42,.72);color:#e2e8f0;border-radius:14px;padding:5px 10px;'
         'font-size:10px;font-weight:600;backdrop-filter:blur(6px)">📍 Location shared while on route</div>'
     )

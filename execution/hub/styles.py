@@ -372,7 +372,13 @@ body.login-body { display:block; }
 
 /* ── Mobile Hub ──────────────────────────────────────────────────────────────── */
 .mobile-wrap { min-height:100vh; display:flex; flex-direction:column; background:var(--bg); }
-.mobile-hdr  { padding:14px 18px 10px; background:var(--bg2); border-bottom:1px solid var(--border);
+/* iOS standalone PWA: apple-mobile-web-app-status-bar-style = black-translucent
+   makes the status bar transparent and content extends behind the notch /
+   Dynamic Island. Push the header down by env(safe-area-inset-top) so the
+   hamburger and title stay tappable below it. */
+.mobile-hdr  { padding-top:calc(14px + env(safe-area-inset-top));
+               padding-right:18px; padding-bottom:10px; padding-left:18px;
+               background:var(--bg2); border-bottom:1px solid var(--border);
                display:flex; align-items:flex-start; justify-content:space-between; }
 .mobile-hdr-title { font-size:16px; font-weight:700; }
 .mobile-hdr-sub   { font-size:11px; color:var(--text3); margin-top:2px; }
