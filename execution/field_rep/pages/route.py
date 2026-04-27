@@ -91,6 +91,10 @@ function _haversine(lat1, lng1, lat2, lng2) {{
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }}
 
+var _promptedStopIds = new Set();  // dedup geofence toasts across position updates
+var _geofenceOpen = false;          // suppress new toasts while one is on screen
+const _GEOFENCE_RADIUS_MI = 0.031;  // ~50m
+
 if (navigator.geolocation) {{
   navigator.geolocation.watchPosition(function(pos) {{
     _userLat = pos.coords.latitude; _userLng = pos.coords.longitude;
@@ -100,7 +104,65 @@ if (navigator.geolocation) {{
         icon:{{path:google.maps.SymbolPath.CIRCLE,scale:7,fillColor:'#2563eb',fillOpacity:1,strokeColor:'#fff',strokeWeight:2}},
         title:'You',zIndex:999}});
     }}
+    checkGeofence(_userLat, _userLng);
   }}, function(){{}}, {{timeout:10000,enableHighAccuracy:true}});
+}}
+
+// ── Auto-check-in prompt ──────────────────────────────────────────────────
+// When the rep walks within ~50m of a Pending stop, surface a one-time toast
+// asking if they want to check in. Tapping Yes flips the stop to In Progress
+// (stamps Arrived At) without opening any form. We dedup per stop so the rep
+// isn't pestered every second the GPS updates.
+function checkGeofence(lat, lng) {{
+  if (_geofenceOpen) return;
+  if (!_routeData || !_routeData.stops) return;
+  if (typeof lat !== 'number' || typeof lng !== 'number') return;
+  for (var i = 0; i < _routeData.stops.length; i++) {{
+    var s = _routeData.stops[i];
+    if (!s || s.status !== 'Pending') continue;
+    if (_promptedStopIds.has(s.stop_id)) continue;
+    var sLat = parseFloat(s.lat), sLng = parseFloat(s.lng);
+    if (!sLat || !sLng) continue;
+    var dist = _haversine(lat, lng, sLat, sLng);
+    if (dist <= _GEOFENCE_RADIUS_MI) {{
+      _promptedStopIds.add(s.stop_id);
+      showGeofencePrompt(s);
+      return;  // one at a time
+    }}
+  }}
+}}
+
+function showGeofencePrompt(stop) {{
+  _geofenceOpen = true;
+  var bg = document.createElement('div');
+  bg.id = 'gf-prompt';
+  bg.style.cssText = 'position:fixed;left:12px;right:12px;bottom:16px;z-index:1300;'
+    + 'background:var(--bg2);border:1px solid var(--border);border-radius:14px;'
+    + 'padding:14px 16px;box-shadow:0 6px 24px rgba(0,0,0,.35);font-family:inherit';
+  bg.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+    + '<span style="font-size:18px">\U0001f4cd</span>'
+    + '<div style="flex:1;min-width:0">'
+    + '<div style="font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+    + esc(stop.name || 'this stop') + '</div>'
+    + '<div style="font-size:11px;color:var(--text3)">You\\'re here — want to check in?</div>'
+    + '</div></div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button onclick="dismissGeofence(true,'+stop.stop_id+')" '
+    + 'style="flex:1;background:#a855f7;color:#fff;border:none;border-radius:10px;padding:11px;'
+    + 'font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Yes, check in</button>'
+    + '<button onclick="dismissGeofence(false,'+stop.stop_id+')" '
+    + 'style="width:90px;background:var(--bg);color:var(--text2);border:1px solid var(--border);'
+    + 'border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Not yet</button>'
+    + '</div>';
+  document.body.appendChild(bg);
+}}
+
+function dismissGeofence(accept, stopId) {{
+  var el = document.getElementById('gf-prompt');
+  if (el) el.remove();
+  _geofenceOpen = false;
+  if (accept) routeArrive(stopId);
 }}
 
 async function loadRoute() {{
