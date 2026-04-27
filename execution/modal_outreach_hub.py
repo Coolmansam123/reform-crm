@@ -610,16 +610,19 @@ async def scan_stale_patients():
     except Exception: pass
     print(f"[stale-patients] scanned={len(patients)} stale={len(stale)} runs_created={created}")
 
+    # Piggyback the overdue-follow-up push pass on the same 8am PT cron tick
+    # (Modal workspace cron limit is 5; folding in here instead of a 6th).
+    try:
+        await notify_overdue_followups()
+    except Exception as e:
+        print(f"[stale-patients] overdue-push pass failed: {e}")
+
 
 # ──────────────────────────────────────────────────────────────────────────────
-# OVERDUE FOLLOW-UP PUSH — daily 8am PT, push reps a count of stale leads
+# OVERDUE FOLLOW-UP PUSH — runs as part of the daily 8am PT stale-patient cron
+# (Modal workspace cron limit is 5; we piggyback to avoid using a fresh slot).
+# Called from `scan_stale_patients` once that finishes.
 # ──────────────────────────────────────────────────────────────────────────────
-@app.function(
-    image=image,
-    secrets=[modal.Secret.from_name("outreach-hub-secrets")],
-    schedule=modal.Cron("0 16 * * *"),  # 16:00 UTC = 8am PST / 9am PDT
-    timeout=300,
-)
 async def notify_overdue_followups():
     """For each lead whose Status is still in an open stage and whose Created
     date is >3 days old, push a summary to the lead's Owner. One push per
