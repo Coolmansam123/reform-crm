@@ -15,6 +15,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import storage
 from .auth import router as auth_router
@@ -46,9 +48,26 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Reform Routes", lifespan=lifespan)
 
+# PWA static assets — manifest, icons, service worker. Served unauthenticated
+# so the install + sw registration flow works before login.
+_STATIC = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
+
 app.include_router(auth_router)
 app.include_router(pages_router)
 app.include_router(api_router)
+
+
+@app.get("/manifest.json")
+async def manifest_passthrough():
+    """Serve manifest.json from the root for browsers that look for it there."""
+    return FileResponse(str(_STATIC / "manifest.json"), media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+async def sw_passthrough():
+    """Serve sw.js from the root so its scope is '/' (covers the whole app)."""
+    return FileResponse(str(_STATIC / "sw.js"), media_type="application/javascript")
 
 
 @app.get("/healthz")

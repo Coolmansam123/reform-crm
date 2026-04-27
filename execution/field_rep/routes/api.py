@@ -213,6 +213,61 @@ async def transcribe_activity_audio(request: Request):
     )
 
 
+@router.post("/api/rep/ping")
+async def rep_ping(request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"ok": False, "error": "unauthenticated"}, status_code=401)
+    from hub.rep_tracker import update_rep_location
+    br, bt = _env()
+    return await update_rep_location(request, br, bt, session)
+
+
+# ─── Push notifications ─────────────────────────────────────────────────────
+def _vapid_env() -> tuple[str, str, str]:
+    return (
+        os.environ.get("VAPID_PUBLIC_KEY", ""),
+        os.environ.get("VAPID_PRIVATE_KEY", ""),
+        os.environ.get("VAPID_SUBJECT", "mailto:techops@reformchiropractic.com"),
+    )
+
+
+@router.get("/api/push/vapid-public-key")
+async def push_vapid_public_key(request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    from hub.push import vapid_public_key
+    pub, _, _ = _vapid_env()
+    return vapid_public_key(pub)
+
+
+@router.post("/api/push/subscribe")
+async def push_subscribe(request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"ok": False, "error": "unauthenticated"}, status_code=401)
+    from hub.push import subscribe
+    br, bt = _env()
+    return await subscribe(request, br, bt, session)
+
+
+@router.post("/api/push/test")
+async def push_test(request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"ok": False, "error": "unauthenticated"}, status_code=401)
+    from hub.push import test_push
+    br, bt = _env()
+    pub, priv, sub = _vapid_env()
+    return await test_push(
+        request, br, bt, session,
+        vapid_public_key_b64url=pub,
+        vapid_private_key_b64url=priv,
+        vapid_subject=sub,
+    )
+
+
 # ─── Lead capture (field-rep form) ───────────────────────────────────────────
 # Field reps submit the Capture Lead form to this endpoint. Creates a T_LEADS
 # row; on success, the mobile UI closes the form. The hub has an analogous

@@ -69,7 +69,7 @@ app = modal.App("outreach-hub")
 image = (
     modal.Image.debian_slim()
     .apt_install("libpango-1.0-0", "libpangoft2-1.0-0", "libcairo2", "libfontconfig1")
-    .pip_install("fastapi[standard]", "python-multipart", "httpx", "weasyprint", "openai==1.59.*")
+    .pip_install("fastapi[standard]", "python-multipart", "httpx", "weasyprint", "openai==1.59.*", "pywebpush==2.0.*")
     .add_local_python_source("hub")
 )
 
@@ -609,6 +609,73 @@ async def scan_stale_patients():
     try: hub_cache.pop(f"table:{T_SEQUENCE_ENROLLMENTS}", None)
     except Exception: pass
     print(f"[stale-patients] scanned={len(patients)} stale={len(stale)} runs_created={created}")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# OVERDUE FOLLOW-UP PUSH — daily 8am PT, push reps a count of stale leads
+# ──────────────────────────────────────────────────────────────────────────────
+@app.function(
+    image=image,
+    secrets=[modal.Secret.from_name("outreach-hub-secrets")],
+    schedule=modal.Cron("0 16 * * *"),  # 16:00 UTC = 8am PST / 9am PDT
+    timeout=300,
+)
+async def notify_overdue_followups():
+    """For each lead whose Status is still in an open stage and whose Created
+    date is >3 days old, push a summary to the lead's Owner. One push per
+    rep per day with count of stale leads."""
+    from collections import defaultdict
+    from datetime import date as _date, timedelta as _td
+
+    br = os.environ.get("BASEROW_URL", "")
+    bt = os.environ.get("BASEROW_API_TOKEN", "")
+    if not br or not bt:
+        print("[overdue-push] missing baserow config; skipping")
+        return
+    pub = os.environ.get("VAPID_PUBLIC_KEY", "")
+    priv = os.environ.get("VAPID_PRIVATE_KEY", "")
+    sub = os.environ.get("VAPID_SUBJECT", "mailto:techops@reformchiropractic.com")
+    if not (pub and priv):
+        print("[overdue-push] VAPID not configured; skipping")
+        return
+
+    leads = await _fetch_table_all(br, bt, T_LEADS)
+    cutoff = _date.today() - _td(days=3)
+    OPEN = {"New", "Contacted", "Appointment Scheduled", "Seen"}
+
+    def _sv(v):
+        if isinstance(v, dict): return (v.get("value") or v.get("name") or "")
+        return v or ""
+
+    by_owner: dict[str, int] = defaultdict(int)
+    for L in leads or []:
+        owner = (L.get("Owner") or "").strip().lower()
+        if not owner: continue
+        status = _sv(L.get("Status"))
+        if status not in OPEN: continue
+        created = (L.get("Created") or L.get("Date") or "")[:10]
+        try:
+            y, m, d = created.split("-")
+            cd = _date(int(y), int(m), int(d))
+        except Exception:
+            continue
+        if cd <= cutoff:
+            by_owner[owner] += 1
+
+    from hub.push import send_push_to_email
+    sent_total = 0
+    for owner, count in by_owner.items():
+        title = "Reform — overdue follow-ups"
+        body = f"{count} lead{'s' if count != 1 else ''} need a follow-up today."
+        result = await send_push_to_email(
+            br, bt, owner, title, body,
+            url="/outreach",
+            vapid_private_key_b64url=priv,
+            vapid_public_key_b64url=pub,
+            vapid_subject=sub,
+        )
+        sent_total += result.get("sent", 0)
+    print(f"[overdue-push] reps_with_stale={len(by_owner)} pushes_sent={sent_total}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1890,6 +1957,91 @@ def web():
         if not user: return RedirectResponse(url="/login")
         if not _has_hub_access(user, "guerilla"): return RedirectResponse(url="/")
         return HTMLResponse(_route_planner_page(br, bt, user=user))
+
+    @fapp.get("/reps/live", response_class=HTMLResponse)
+    async def reps_live_page(request: Request):
+        user, br, bt = _guard(request)
+        if not user: return RedirectResponse(url="/login")
+        if not _is_admin(user):
+            return HTMLResponse(_forbidden_page(br, bt, user=user), status_code=403)
+        from hub.rep_tracker import _rep_tracker_page
+        return HTMLResponse(_rep_tracker_page(br, bt, user=user))
+
+    @fapp.get("/api/admin/reps/live")
+    async def api_admin_reps_live(request: Request):
+        user, br, bt = _guard(request)
+        if not user:
+            return JSONResponse({"error": "unauthenticated"}, status_code=401)
+        from hub.rep_tracker import get_active_reps
+        return await get_active_reps(request, br, bt, user)
+
+    @fapp.post("/api/rep/ping")
+    async def api_rep_ping(request: Request):
+        user, br, bt = _guard(request)
+        if not user:
+            return JSONResponse({"ok": False, "error": "unauthenticated"}, status_code=401)
+        from hub.rep_tracker import update_rep_location
+        return await update_rep_location(request, br, bt, user)
+
+    @fapp.get("/reps/performance", response_class=HTMLResponse)
+    async def reps_performance_page(request: Request):
+        user, br, bt = _guard(request)
+        if not user: return RedirectResponse(url="/login")
+        if not _is_admin(user):
+            return HTMLResponse(_forbidden_page(br, bt, user=user), status_code=403)
+        from hub.rep_performance import _rep_performance_page
+        return HTMLResponse(_rep_performance_page(br, bt, user=user))
+
+    @fapp.get("/api/admin/rep-performance")
+    async def api_admin_rep_performance(request: Request):
+        user, br, bt = _guard(request)
+        if not user:
+            return JSONResponse({"error": "unauthenticated"}, status_code=401)
+        from hub.rep_performance import get_rep_performance
+        # Adapter: rep_performance handler expects cached_rows(tid); hub uses
+        # _cached_table(tid, br, bt). Close over br/bt from this request.
+        async def _cr(tid: int):
+            return await _cached_table(tid, br, bt)
+        return await get_rep_performance(request, br, bt, user, _cr)
+
+    # ── Push notifications ────────────────────────────────────────────────────
+    def _vapid_env_hub():
+        return (
+            os.environ.get("VAPID_PUBLIC_KEY", ""),
+            os.environ.get("VAPID_PRIVATE_KEY", ""),
+            os.environ.get("VAPID_SUBJECT", "mailto:techops@reformchiropractic.com"),
+        )
+
+    @fapp.get("/api/push/vapid-public-key")
+    async def api_push_vapid_key(request: Request):
+        user, br, bt = _guard(request)
+        if not user:
+            return JSONResponse({"error": "unauthenticated"}, status_code=401)
+        from hub.push import vapid_public_key
+        pub, _, _ = _vapid_env_hub()
+        return vapid_public_key(pub)
+
+    @fapp.post("/api/push/subscribe")
+    async def api_push_subscribe(request: Request):
+        user, br, bt = _guard(request)
+        if not user:
+            return JSONResponse({"ok": False, "error": "unauthenticated"}, status_code=401)
+        from hub.push import subscribe
+        return await subscribe(request, br, bt, user)
+
+    @fapp.post("/api/push/test")
+    async def api_push_test(request: Request):
+        user, br, bt = _guard(request)
+        if not user:
+            return JSONResponse({"ok": False, "error": "unauthenticated"}, status_code=401)
+        from hub.push import test_push
+        pub, priv, sub = _vapid_env_hub()
+        return await test_push(
+            request, br, bt, user,
+            vapid_public_key_b64url=pub,
+            vapid_private_key_b64url=priv,
+            vapid_subject=sub,
+        )
 
     @fapp.get("/outreach/list", response_class=HTMLResponse)
     async def outreach_list(request: Request):

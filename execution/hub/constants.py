@@ -43,6 +43,7 @@ T_SMS_MESSAGES         = 823
 T_SEQUENCES            = 824
 T_SEQUENCE_ENROLLMENTS = 825
 T_SOCIAL_NOTIFICATIONS = 826
+T_PUSH_SUBSCRIPTIONS   = 827  # Phase 3 push notifications (rep, endpoint, keys)
 
 
 # ─── Leads follow-up pipeline ─────────────────────────────────────────────────

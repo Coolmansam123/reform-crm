@@ -65,6 +65,10 @@ def _mobile_route_page(br: str, bt: str, user: dict = None,
         '<div class="m-sheet-handle" onclick="closeDirectionsSheet()"></div>'
         '<div id="d-sheet-body" style="padding:0 0 20px"></div>'
         '</div>'
+        # Privacy indicator (location only shared while on route)
+        '<div id="loc-pill" style="display:none;position:fixed;left:10px;bottom:10px;z-index:90;'
+        'background:rgba(15,23,42,.72);color:#e2e8f0;border-radius:14px;padding:5px 10px;'
+        'font-size:10px;font-weight:600;backdrop-filter:blur(6px)">📍 Location shared while on route</div>'
     )
     route_js = f"""
 const RGK = {repr(gk)};
@@ -1127,6 +1131,30 @@ function openRouteLeadCapture() {{
   closeRouteSheet();  // bottom sheet out of the way before the modal opens
   setTimeout(function() {{ openLeadCapture(name); }}, 60);
 }}
+
+// ── Live-rep ping (admin map) ────────────────────────────────────────────
+// Fires every 30s while the rep has a route loaded AND we have GPS coords.
+// Server upserts the rep's T_STAFF row; admin map polls /api/admin/reps/live.
+async function _pingRepLocation() {{
+  if (!_routeData || !_routeData.stops || !_routeData.stops.length) return;
+  if (_userLat == null || _userLng == null) return;
+  // Show the privacy pill while pings are firing.
+  var pill = document.getElementById('loc-pill');
+  if (pill) pill.style.display = 'block';
+  try {{
+    await fetch('/api/rep/ping', {{
+      method: 'POST', headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{
+        lat: _userLat,
+        lng: _userLng,
+        route_id: _routeData.route_id || null,
+      }}),
+    }});
+  }} catch (e) {{}}
+}}
+setInterval(_pingRepLocation, 30000);
+// First ping after 5s so admins see reps quickly when they open a route.
+setTimeout(_pingRepLocation, 5000);
 
 loadRoute();
 """
