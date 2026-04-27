@@ -717,14 +717,34 @@ async def update_route_stop(request: Request, br: str, bt: str, user: dict,
     notes  = (body.get("notes") or "").strip()
     lat    = body.get("lat")
     lng    = body.get("lng")
-    if status not in ("Pending", "Visited", "Skipped", "Not Reached"):
+    if status not in ("Pending", "In Progress", "Visited", "Skipped", "Not Reached"):
         return JSONResponse({"error": "invalid status"}, status_code=400)
+    now_str = _dt.now().strftime("%Y-%m-%d %H:%M")
     fields = {"Status": status}
     if notes:
         fields["Notes"] = notes
+    if status == "In Progress":
+        fields["Arrived At"] = now_str
     if status in ("Visited", "Skipped", "Not Reached"):
-        fields["Completed At"] = _dt.now().strftime("%Y-%m-%d %H:%M")
+        fields["Completed At"] = now_str
         fields["Completed By"] = user.get("email", "")
+        fields["Departed At"]  = now_str
+        # Compute Duration Mins from existing Arrived At (round-trip GET so the
+        # client doesn't have to track Arrive timestamp through a refresh).
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                gr = await client.get(
+                    f"{br}/api/database/rows/table/{T_GOR_ROUTE_STOPS}/{stop_id}/?user_field_names=true",
+                    headers={"Authorization": f"Token {bt}"},
+                )
+            if gr.is_success:
+                arrived = (gr.json().get("Arrived At") or "").strip()
+                if arrived:
+                    a = _dt.strptime(arrived, "%Y-%m-%d %H:%M")
+                    delta = _dt.now() - a
+                    fields["Duration Mins"] = max(0, int(round(delta.total_seconds() / 60)))
+        except Exception:
+            pass
     if status == "Visited" and isinstance(lat, (int, float)) and isinstance(lng, (int, float)):
         fields["Check-In Lat"] = lat
         fields["Check-In Lng"] = lng

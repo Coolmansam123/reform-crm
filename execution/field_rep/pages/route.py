@@ -72,7 +72,8 @@ const _GGOR_VENUES = {T_GOR_VENUES};
 const _GGOR_ACTS   = {T_GOR_ACTS};
 const _GGOR_BOXES  = {T_GOR_BOXES};
 const _GOFF_LAT = 33.9478, _GOFF_LNG = -118.1335;
-const _STATUS_COLORS = {{'Pending':'#4285f4','Visited':'#059669','Skipped':'#f97316','Not Reached':'#ef4444'}};
+const _STATUS_COLORS = {{'Pending':'#4285f4','In Progress':'#a855f7','Visited':'#059669','Skipped':'#f97316','Not Reached':'#ef4444'}};
+const _SENT_COLORS_R = {{Green:'#059669',Yellow:'#f59e0b',Red:'#ef4444'}};
 var _routeData = null, _rMap = null, _rMarkers = {{}}, _rPolyline = null, _rOfficeMarker = null;
 var _rDirections = null;  // DirectionsRenderer for street-following polyline
 var _rLastDirections = null;  // cached DirectionsResult for turn-by-turn sheet
@@ -467,14 +468,23 @@ function renderRouteSheet(stop) {{
 
   // Info tab
   html += '<div class="m-panel active" id="rp-info-'+id+'" style="padding:12px 16px">';
+  // Briefing card \u2014 populated by loadRouteVenueData with last visit, last
+  // note, last contact, promised follow-up, open-lead count, sentiment dot.
+  html += '<div id="rv-briefing-'+id+'" style="display:none;margin-bottom:10px"></div>';
   if (addr) {{
     var mapsLink = 'https://maps.google.com/?q='+encodeURIComponent(addr);
     html += '<div style="margin-bottom:8px;font-size:13px">\U0001f4cd '+esc(addr)+' <a href="'+mapsLink+'" target="_blank" style="color:#3b82f6;font-size:12px">Navigate \u2197</a></div>';
   }}
-  // Check In / Skip / Didn't Get To buttons \u2014 top of the Info tab only, so
-  // it's the first action visible on the default tab without competing
-  // with the +Capture Lead button on the Leads tab.
+  // Action buttons by status. Pending \u2192 Arrive (one tap \u2192 In Progress, sets
+  // Arrived At); In Progress \u2192 Check In (opens visit form, marks Visited,
+  // sets Departed At + computes Duration Mins).
   if (status === 'Pending') {{
+    html += '<div style="padding:4px 0 12px;display:flex;gap:10px">';
+    html += '<button onclick="routeArrive('+id+')" style="flex:1;background:#a855f7;color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer">\U0001f4cd Arrive</button>';
+    html += '<button onclick="routeSkip('+id+')" style="width:70px;background:var(--bg);color:var(--text2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;font-weight:600;cursor:pointer">Skip</button>';
+    html += '<button onclick="routeNotReached('+id+')" style="width:70px;background:var(--bg);color:#ef4444;border:1px solid #ef444440;border-radius:10px;padding:14px;font-size:11px;font-weight:600;cursor:pointer;line-height:1.2">Didn\\\'t<br>Get To</button>';
+    html += '</div>';
+  }} else if (status === 'In Progress') {{
     html += '<div style="padding:4px 0 12px;display:flex;gap:10px">';
     html += '<button onclick="routeCheckIn('+id+')" style="flex:1;background:#ea580c;color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer">Check In</button>';
     html += '<button onclick="routeSkip('+id+')" style="width:70px;background:var(--bg);color:var(--text2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;font-weight:600;cursor:pointer">Skip</button>';
@@ -544,6 +554,82 @@ async function loadRouteVenueData(stop) {{
   var id = stop.stop_id;
   var companyId = buildVenueCompanyMap(companies)[venueId];
 
+  // Pull T_ACTIVITIES rows for the linked company so sentiment + photos
+  // logged via the company-detail composer show up in this venue's history.
+  // T_GOR_ACTS rows (legacy guerilla flow) don't have those fields; merging
+  // here lets the briefing card and Visit History render uniformly.
+  var compActs = [];
+  if (companyId) {{
+    try {{
+      var car = await fetch('/api/companies/' + companyId + '/activities');
+      if (car.ok) compActs = await car.json();
+    }} catch (e) {{}}
+  }}
+  var venueActs = acts.filter(function(a) {{
+    var lf = a['Business'];
+    return Array.isArray(lf) && lf.some(function(r){{return r.id===venueId;}});
+  }});
+  var allActs = venueActs.concat(compActs).sort(function(a,b) {{
+    var da = a['Date'] || (a['Created']||'').slice(0,10);
+    var db = b['Date'] || (b['Created']||'').slice(0,10);
+    return (db||'').localeCompare(da||'');
+  }});
+
+  // ── Briefing card ───────────────────────────────────────────────────────
+  var briefEl = document.getElementById('rv-briefing-' + id);
+  if (briefEl) {{
+    var brief = '';
+    var latest = allActs[0];
+    if (latest) {{
+      var sent = (latest.Sentiment && latest.Sentiment.value) || latest.Sentiment || '';
+      var dot = (sent && _SENT_COLORS_R[sent])
+        ? '<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+_SENT_COLORS_R[sent]+';margin-right:6px;vertical-align:middle"></span>'
+        : '';
+      var dStr = latest['Date'] || (latest['Created']||'').slice(0,10);
+      var daysAgo = '';
+      if (dStr) {{
+        var d = new Date(dStr);
+        if (!isNaN(d.getTime())) {{
+          var diff = Math.floor((new Date() - d) / 86400000);
+          daysAgo = diff <= 0 ? 'today' : (diff === 1 ? '1d ago' : diff + 'd ago');
+        }}
+      }}
+      brief += '<div style="font-size:13px;line-height:1.5;color:var(--text2)">';
+      if (daysAgo) brief += '<div>'+dot+'<strong>Last visit</strong> · '+esc(daysAgo)+'</div>';
+      var noteText = latest.Summary || '';
+      if (noteText) {{
+        var note = noteText.length > 80 ? noteText.slice(0, 80) + '…' : noteText;
+        brief += '<div style="margin-top:4px;font-style:italic;color:var(--text)">"'+esc(note)+'"</div>';
+      }}
+      var person = latest['Contact Person'] || '';
+      if (person) brief += '<div style="margin-top:4px">\U0001f464 '+esc(person)+'</div>';
+      brief += '</div>';
+    }} else {{
+      brief += '<div style="font-size:13px;color:var(--text3);font-style:italic">No prior visits</div>';
+    }}
+    var fuDateB = v['Follow-Up Date'] || '';
+    if (fuDateB) {{
+      brief += '<div style="margin-top:4px;font-size:13px;color:var(--text2)">\U0001f4c5 Promised: <strong>'+esc(fuDateB)+'</strong></div>';
+    }}
+    var vNameLower = (v['Name']||'').trim().toLowerCase();
+    var _openSet = ['New','Contacted','Appointment Set','Patient Seen'];
+    var openLeads = leads.filter(function(L) {{
+      var src = (L['Source']||'').trim().toLowerCase();
+      if (!src || src !== vNameLower) return false;
+      var st = (L['Status'] && L['Status'].value) || L['Status'] || 'New';
+      return _openSet.indexOf(st) !== -1;
+    }}).length;
+    if (openLeads > 0) {{
+      brief += '<div style="margin-top:4px;font-size:13px;color:var(--text2)">\U0001f3af <strong>'+openLeads+'</strong> open lead'+(openLeads>1?'s':'')+'</div>';
+    }}
+    briefEl.innerHTML =
+      '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px">' +
+      '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;font-weight:700">Briefing</div>' +
+      brief +
+      '</div>';
+    briefEl.style.display = 'block';
+  }}
+
   // Fill Info tab
   var infoEl = document.getElementById('rv-info-' + id);
   if (infoEl && v) {{
@@ -581,27 +667,32 @@ async function loadRouteVenueData(stop) {{
     ih += '<button onclick="mRouteAddNote()" style="background:#e94560;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;min-width:50px;min-height:40px">Add</button>';
     ih += '</div>';
     ih += '<div id="rv-note-st-'+id+'" style="font-size:11px;margin-top:4px;min-height:14px"></div>';
-    // ── Visit History (from T_GOR_ACTS) ─────────────────────────────
-    var myActs = acts.filter(function(a) {{
-      var lf = a['Business'];
-      return Array.isArray(lf) && lf.some(function(r){{return r.id===venueId;}});
-    }}).sort(function(a,b) {{
-      return (b['Date']||'').localeCompare(a['Date']||'');
-    }}).slice(0, 10);
+    // ── Visit History (merged from T_GOR_ACTS + T_ACTIVITIES) ──────
+    var historyActs = allActs.slice(0, 10);
     ih += '<hr style="border:none;border-top:1px solid var(--border);margin:14px 0 10px">';
     ih += '<div class="m-sheet-lbl">Visit History</div>';
-    if (myActs.length) {{
-      ih += myActs.map(function(a) {{
+    if (historyActs.length) {{
+      ih += historyActs.map(function(a) {{
         var t = (a['Type'] && a['Type'].value) || a['Type'] || '';
         var o = (a['Outcome'] && a['Outcome'].value) || a['Outcome'] || '';
-        var d = a['Date'] || '';
+        var d = a['Date'] || (a['Created']||'').slice(0,10);
         var sm = a['Summary'] || '';
+        var sentV = (a.Sentiment && a.Sentiment.value) || a.Sentiment || '';
+        var photo = (a['Photo URL'] || '').trim();
+        var sDot = (sentV && _SENT_COLORS_R[sentV])
+          ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+_SENT_COLORS_R[sentV]+';margin-right:5px;vertical-align:middle"></span>'
+          : '';
         var parts = [];
         if (t) parts.push('<span style="font-weight:600">'+esc(t)+'</span>');
         if (o) parts.push(esc(o));
+        var head = sDot + parts.join(' — ');
+        var thumb = photo
+          ? '<div style="margin-top:4px"><img src="'+esc(photo)+'" onclick="openRoutePhotoLightbox(\\''+esc(photo)+'\\')" style="max-width:110px;max-height:80px;border-radius:6px;border:1px solid var(--border);cursor:pointer;object-fit:cover"></div>'
+          : '';
         return '<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">'
-             + parts.join(' — ')
+             + head
              + (sm ? '<div style="font-size:12px;color:var(--text2);margin-top:2px">'+esc(sm)+'</div>' : '')
+             + thumb
              + (d ? '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+esc(d)+'</div>' : '')
              + '</div>';
       }}).join('');
@@ -742,6 +833,20 @@ async function updateRouteVenueStatus(venueId, val) {{
 }}
 
 var _pendingCheckInStopId = null;
+
+function routeArrive(stopId) {{
+  // One-tap "I'm here" — flips status to In Progress and stamps Arrived At.
+  // The subsequent Check In tap stamps Departed At + computes Duration Mins.
+  markRouteStop(stopId, 'In Progress', null);
+}}
+
+function openRoutePhotoLightbox(url) {{
+  var bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:1200;display:flex;align-items:center;justify-content:center;padding:20px;cursor:pointer';
+  bg.onclick = function() {{ bg.remove(); }};
+  bg.innerHTML = '<img src="' + url + '" style="max-width:100%;max-height:100%;object-fit:contain">';
+  document.body.appendChild(bg);
+}}
 
 function routeCheckIn(stopId) {{
   _pendingCheckInStopId = stopId;

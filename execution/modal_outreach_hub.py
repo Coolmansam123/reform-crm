@@ -2356,6 +2356,9 @@ def web():
         summary = (body.get("summary") or "").strip()
         if not summary:
             return JSONResponse({"error": "summary required"}, status_code=400)
+        sentiment = (body.get("sentiment") or "").strip()
+        if sentiment not in ("Green", "Yellow", "Red"):
+            sentiment = ""
         payload = {
             "Summary":        summary,
             "Kind":           body.get("kind") or "user_activity",
@@ -2367,6 +2370,8 @@ def web():
             "Author":         session.get("email", ""),
             "Created":        _iso_now(),
             "Company":        [company_id],
+            "Sentiment":      sentiment or None,
+            "Photo URL":      (body.get("photo_url") or "").strip() or None,
         }
         if body.get("contact_id"):
             payload["Contact"] = [int(body["contact_id"])]
@@ -2381,6 +2386,19 @@ def web():
             return JSONResponse({"error": r.text}, status_code=r.status_code)
         _invalidate(T_ACTIVITIES)
         return JSONResponse(r.json())
+
+    @fapp.post("/api/companies/{company_id}/activities/photo")
+    async def api_company_activity_photo(company_id: int, request: Request):
+        session, err = _crm_guard(request)
+        if err: return err
+        from hub import outreach_api
+        env = _env()
+        return await outreach_api.upload_activity_photo(
+            request, env["br"], env["bt"], session, company_id,
+            bunny_zone=os.environ.get("BUNNY_STORAGE_ZONE", "techopssocialmedia"),
+            bunny_key=os.environ.get("BUNNY_STORAGE_API_KEY", ""),
+            bunny_cdn_base="https://techopssocialmedia.b-cdn.net",
+        )
 
     @fapp.get("/api/companies/{company_id}/people")
     async def api_company_people(company_id: int, request: Request):

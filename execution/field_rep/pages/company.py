@@ -106,6 +106,37 @@ def _mobile_company_detail_page(br: str, bt: str, company_id: int,
         '<textarea id="cd-summary" rows="3" placeholder="What happened?" '
         'style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);'
         'color:var(--text);border-radius:6px;font-size:13px;resize:vertical;font-family:inherit;margin-bottom:12px"></textarea>'
+        # Sentiment row (Green/Yellow/Red)
+        '<label style="display:block;font-size:11px;font-weight:700;color:var(--text3);'
+        'text-transform:uppercase;margin-bottom:4px;letter-spacing:.4px">How did it go?</label>'
+        '<div id="cd-sentiment-row" style="display:flex;gap:6px;margin-bottom:12px">'
+        '<button type="button" data-sent="Green"  onclick="setSentiment(\'Green\')"  '
+        'style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);'
+        'color:var(--text);border-radius:6px;font-size:13px;cursor:pointer;font-family:inherit">🟢 Good</button>'
+        '<button type="button" data-sent="Yellow" onclick="setSentiment(\'Yellow\')" '
+        'style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);'
+        'color:var(--text);border-radius:6px;font-size:13px;cursor:pointer;font-family:inherit">🟡 Mixed</button>'
+        '<button type="button" data-sent="Red"    onclick="setSentiment(\'Red\')"    '
+        'style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);'
+        'color:var(--text);border-radius:6px;font-size:13px;cursor:pointer;font-family:inherit">🔴 Bad</button>'
+        '</div>'
+        # Photo capture
+        '<label style="display:block;font-size:11px;font-weight:700;color:var(--text3);'
+        'text-transform:uppercase;margin-bottom:4px;letter-spacing:.4px">Photo (optional)</label>'
+        '<div id="cd-photo-row" style="margin-bottom:12px">'
+        '<label for="cd-photo-input" id="cd-photo-pick" '
+        'style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);'
+        'border:1px solid var(--border);color:var(--text2);border-radius:6px;font-size:13px;cursor:pointer">'
+        '📷 Add photo</label>'
+        '<input type="file" id="cd-photo-input" accept="image/*" capture="environment" '
+        'onchange="onPhotoPicked(event)" style="display:none">'
+        '<div id="cd-photo-preview" style="display:none;margin-top:8px;position:relative">'
+        '<img id="cd-photo-img" style="max-width:100%;max-height:160px;border-radius:6px;border:1px solid var(--border)">'
+        '<button type="button" onclick="clearPhoto()" '
+        'style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;border:none;'
+        'border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer;line-height:1">×</button>'
+        '</div>'
+        '</div>'
         '<label style="display:block;font-size:11px;font-weight:700;color:var(--text3);'
         'text-transform:uppercase;margin-bottom:4px;letter-spacing:.4px">Next follow-up</label>'
         '<input type="date" id="cd-fu" '
@@ -386,18 +417,28 @@ function renderInfoTab() {{
   if (!visits.length) {{
     vEl.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0;text-align:center">No visits logged yet.</div>';
   }} else {{
+    var SENT_COLORS_J = {{ Green: '#059669', Yellow: '#f59e0b', Red: '#ef4444' }};
     var vh = '';
     visits.forEach(function(a) {{
       var type  = svJS(a.Type) || '';
       var summ  = a.Summary || '';
       var when  = a.Created || a.Date || '';
       var who   = a.Author || '';
+      var sent  = svJS(a.Sentiment) || '';
+      var photo = (a['Photo URL'] || '').trim();
       vh += '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px">';
       vh += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">';
+      if (sent && SENT_COLORS_J[sent]) {{
+        vh += '<span title="' + esc(sent) + '" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + SENT_COLORS_J[sent] + ';flex-shrink:0"></span>';
+      }}
       if (type) vh += '<span style="background:#47556920;color:#475569;font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px">' + esc(type) + '</span>';
       vh += '<span style="font-size:10px;color:var(--text3)">' + esc(fmtDate(when)) + (who ? ' · ' + esc(who.split('@')[0]) : '') + '</span>';
       vh += '</div>';
       if (summ) vh += '<div style="font-size:13px;color:var(--text2);white-space:pre-wrap">' + esc(summ) + '</div>';
+      if (photo) {{
+        vh += '<div style="margin-top:6px"><img src="' + esc(photo) + '" onclick="openPhotoLightbox(\\'' + esc(photo) + '\\')" '
+            + 'style="max-width:120px;max-height:90px;border-radius:6px;border:1px solid var(--border);cursor:pointer;object-fit:cover"></div>';
+      }}
       vh += '</div>';
     }});
     vEl.innerHTML = vh;
@@ -600,13 +641,60 @@ async function load() {{
   renderBoxesTab();
 }}
 
-// ── Log-activity modal (unchanged flow) ──────────────────────────────────
+// ── Photo lightbox ───────────────────────────────────────────────────────
+function openPhotoLightbox(url) {{
+  var bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;cursor:pointer';
+  bg.onclick = function() {{ bg.remove(); }};
+  bg.innerHTML = '<img src="' + url + '" style="max-width:100%;max-height:100%;object-fit:contain">';
+  document.body.appendChild(bg);
+}}
+
+// ── Log-activity modal ───────────────────────────────────────────────────
+let _cdSentiment = '';
+let _cdPhotoFile = null;
+const _SENT_COLORS = {{ Green: '#059669', Yellow: '#f59e0b', Red: '#ef4444' }};
+
+function setSentiment(val) {{
+  _cdSentiment = (_cdSentiment === val) ? '' : val;  // tap-again deselects
+  document.querySelectorAll('#cd-sentiment-row button').forEach(function(b) {{
+    var v = b.getAttribute('data-sent');
+    var on = (v === _cdSentiment);
+    b.style.background = on ? _SENT_COLORS[v] : 'var(--bg)';
+    b.style.color      = on ? '#fff'             : 'var(--text)';
+    b.style.borderColor = on ? _SENT_COLORS[v]   : 'var(--border)';
+  }});
+}}
+
+function onPhotoPicked(e) {{
+  var f = e.target.files && e.target.files[0];
+  if (!f) return;
+  _cdPhotoFile = f;
+  var reader = new FileReader();
+  reader.onload = function(ev) {{
+    document.getElementById('cd-photo-img').src = ev.target.result;
+    document.getElementById('cd-photo-preview').style.display = 'block';
+    document.getElementById('cd-photo-pick').textContent = '📷 Replace photo';
+  }};
+  reader.readAsDataURL(f);
+}}
+
+function clearPhoto() {{
+  _cdPhotoFile = null;
+  document.getElementById('cd-photo-input').value = '';
+  document.getElementById('cd-photo-preview').style.display = 'none';
+  document.getElementById('cd-photo-pick').textContent = '📷 Add photo';
+}}
+
 function openLogModal() {{
   document.getElementById('cd-summary').value = '';
   document.getElementById('cd-fu').value = '';
   document.getElementById('cd-type').value = 'Call';
   document.getElementById('cd-status').value = '';
   document.getElementById('cd-modal-msg').textContent = '';
+  _cdSentiment = '';
+  setSentiment('');  // resets button styles
+  clearPhoto();
   document.getElementById('cd-modal-bg').style.display = 'flex';
 }}
 
@@ -629,9 +717,38 @@ async function submitLog() {{
   btn.disabled = true;
   btn.textContent = 'Saving…';
   msg.textContent = '';
+  // Upload photo first (if any), grab URL, include in activity payload.
+  var photoUrl = '';
+  if (_cdPhotoFile) {{
+    btn.textContent = 'Uploading photo…';
+    var fd = new FormData();
+    fd.append('photo', _cdPhotoFile);
+    try {{
+      var pr = await fetch('/api/companies/' + COMPANY_ID + '/activities/photo', {{
+        method: 'POST', body: fd,
+      }});
+      if (pr.ok) {{
+        var pj = await pr.json();
+        photoUrl = pj.url || '';
+      }} else {{
+        msg.style.color = '#ef4444';
+        msg.textContent = 'Photo upload failed (HTTP ' + pr.status + ')';
+        btn.disabled = false; btn.textContent = 'Save';
+        return;
+      }}
+    }} catch (e) {{
+      msg.style.color = '#ef4444';
+      msg.textContent = 'Photo upload network error';
+      btn.disabled = false; btn.textContent = 'Save';
+      return;
+    }}
+    btn.textContent = 'Saving…';
+  }}
   var body = {{ summary: summary, type: type, kind: 'user_activity' }};
   if (fu) body.follow_up = fu;
   if (status) body.new_status = status;
+  if (_cdSentiment) body.sentiment = _cdSentiment;
+  if (photoUrl) body.photo_url = photoUrl;
   var r = await fetch('/api/companies/' + COMPANY_ID + '/activities', {{
     method: 'POST', headers: {{ 'Content-Type': 'application/json' }},
     body: JSON.stringify(body),

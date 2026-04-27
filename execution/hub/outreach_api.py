@@ -104,8 +104,10 @@ async def create_company_activity(
     request, br: str, bt: str, user: dict, company_id: int,
     invalidate=None,
 ) -> JSONResponse:
-    """Body: {summary, kind, type, outcome, person, follow_up, date, contact_id}.
-    `kind` defaults to 'user_activity'. `summary` is required."""
+    """Body: {summary, kind, type, outcome, person, follow_up, date, contact_id,
+    sentiment, photo_url}. `kind` defaults to 'user_activity'. `summary` is required.
+    `sentiment` is optional; one of 'Green' / 'Yellow' / 'Red'. `photo_url` is
+    optional (uploaded separately via /api/companies/{id}/activities/photo)."""
     import httpx
     if not T_ACTIVITIES:
         return JSONResponse({"error": "activities not configured"}, status_code=503)
@@ -113,6 +115,9 @@ async def create_company_activity(
     summary = (body.get("summary") or "").strip()
     if not summary:
         return JSONResponse({"error": "summary required"}, status_code=400)
+    sentiment = (body.get("sentiment") or "").strip()
+    if sentiment and sentiment not in ("Green", "Yellow", "Red"):
+        sentiment = ""
     payload = {
         "Summary":        summary,
         "Kind":           body.get("kind") or "user_activity",
@@ -124,6 +129,8 @@ async def create_company_activity(
         "Author":         user.get("email", ""),
         "Created":        _iso_now(),
         "Company":        [company_id],
+        "Sentiment":      sentiment or None,
+        "Photo URL":      (body.get("photo_url") or "").strip() or None,
     }
     if body.get("contact_id"):
         try: payload["Contact"] = [int(body["contact_id"])]
@@ -162,6 +169,39 @@ async def create_company_activity(
         try: await invalidate(T_ACTIVITIES, T_COMPANIES)
         except Exception: pass
     return JSONResponse(r.json())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/companies/{id}/activities/photo — upload a photo to Bunny CDN
+# Returns {url}; client then includes it as `photo_url` in the activity payload.
+# ─────────────────────────────────────────────────────────────────────────────
+async def upload_activity_photo(
+    request, br: str, bt: str, user: dict, company_id: int,
+    bunny_zone: str, bunny_key: str, bunny_cdn_base: str,
+) -> JSONResponse:
+    import httpx, secrets
+    form = await request.form()
+    photo = form.get("photo")
+    if not photo or not hasattr(photo, "read"):
+        return JSONResponse({"error": "photo file required"}, status_code=400)
+    data = await photo.read()
+    if not data:
+        return JSONResponse({"error": "empty file"}, status_code=400)
+    fname = (photo.filename or "photo.jpg").rsplit(".", 1)
+    ext = fname[1].lower() if len(fname) == 2 else "jpg"
+    if ext not in ("jpg", "jpeg", "png", "webp", "heic"):
+        ext = "jpg"
+    key = f"{secrets.token_urlsafe(8)}.{ext}"
+    upload_url = f"https://la.storage.bunnycdn.com/{bunny_zone}/activities/{company_id}/{key}"
+    async with httpx.AsyncClient(timeout=60) as client:
+        ur = await client.put(
+            upload_url,
+            content=data,
+            headers={"AccessKey": bunny_key, "Content-Type": "application/octet-stream"},
+        )
+    if ur.status_code not in (200, 201):
+        return JSONResponse({"error": f"bunny upload {ur.status_code}"}, status_code=502)
+    return JSONResponse({"url": f"{bunny_cdn_base}/activities/{company_id}/{key}"})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
