@@ -790,6 +790,15 @@ _GFR_FORM2_HTML = (
     '</div>'
     '<div class="gfr-field"><label class="gfr-label">What happened? <span class="req">*</span></label>'
     '<textarea class="gfr-textarea" id="s2-int-summary" placeholder="Describe the interaction\u2026"></textarea></div>'
+    # Optional: update the venue\'s Contact Status as part of this submit
+    '<div class="gfr-field"><label class="gfr-label">Update Contact Status <span style="font-weight:400;color:var(--text3)">(optional)</span></label>'
+    '<select class="gfr-select" id="s2-contact-status">'
+    '<option value="">\u2014 keep current \u2014</option>'
+    '<option value="Not Contacted">Not Contacted</option>'
+    '<option value="Contacted">Contacted</option>'
+    '<option value="In Discussion">In Discussion</option>'
+    '<option value="Active Partner">Active Partner</option>'
+    '</select></div>'
     '</div>'
 
     # -- Event block (hidden by default, shown when checkbox is on) --------
@@ -1084,6 +1093,10 @@ async function s2Submit(){
     fields.venue_id = window._routeCheckInVenueId;
     fields.business_name = window._routeCheckInBusinessName || '';
   }
+  // Optional Contact Status update — only sent when the rep picked one.
+  var csEl = document.getElementById('s2-contact-status');
+  var csVal = csEl ? csEl.value.trim() : '';
+  if (csVal) fields.contact_status = csVal;
   var formType='Interaction Only';
   var flyer=null;
 

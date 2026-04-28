@@ -274,6 +274,51 @@ async def push_test(request: Request):
     )
 
 
+# ─── Lead detail (read + edit) ───────────────────────────────────────────────
+@router.get("/api/leads/{lead_id}")
+async def get_lead(lead_id: int, request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    br, bt = _env()
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.get(
+            f"{br}/api/database/rows/table/{T_LEADS}/{lead_id}/?user_field_names=true",
+            headers={"Authorization": f"Token {bt}"},
+        )
+    if r.status_code == 404:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    if r.status_code != 200:
+        return JSONResponse({"error": r.text[:300]}, status_code=r.status_code)
+    return JSONResponse(r.json())
+
+
+@router.patch("/api/leads/{lead_id}")
+async def update_lead(lead_id: int, request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    body = await request.json()
+    # Whitelist editable fields. Single_select values pass as bare strings
+    # (per memory feedback_baserow_single_select.md).
+    allowed = {"Name", "Phone", "Email", "Status", "Reason", "Source",
+               "Notes", "Follow-Up Date"}
+    payload = {k: v for k, v in (body or {}).items() if k in allowed}
+    if not payload:
+        return JSONResponse({"error": "no fields to update"}, status_code=400)
+    br, bt = _env()
+    async with httpx.AsyncClient(timeout=15) as client:
+        r = await client.patch(
+            f"{br}/api/database/rows/table/{T_LEADS}/{lead_id}/?user_field_names=true",
+            headers={"Authorization": f"Token {bt}", "Content-Type": "application/json"},
+            json=payload,
+        )
+    if r.status_code not in (200, 201):
+        return JSONResponse({"error": r.text[:300]}, status_code=r.status_code)
+    await _invalidate(T_LEADS)
+    return JSONResponse(r.json())
+
+
 # ─── Lead capture (field-rep form) ───────────────────────────────────────────
 # Field reps submit the Capture Lead form to this endpoint. Creates a T_LEADS
 # row; on success, the mobile UI closes the form. The hub has an analogous

@@ -80,6 +80,29 @@ def _mobile_route_page(br: str, bt: str, user: dict = None,
         'background:#ea580c;color:#fff;border:none;border-radius:22px;padding:10px 16px;'
         'font-size:13px;font-weight:700;box-shadow:0 4px 12px rgba(234,88,12,.4);cursor:pointer;font-family:inherit;'
         'max-width:60vw;text-align:left;line-height:1.2"></button>'
+        # Lead detail / edit modal
+        '<div id="lead-modal-bg" onclick="if(event.target===this)closeLeadModal()" '
+        'style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1100;'
+        'align-items:flex-start;justify-content:center;padding:30px 14px;overflow-y:auto">'
+        '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;'
+        'width:100%;max-width:480px;padding:18px 20px calc(20px + env(safe-area-inset-bottom))">'
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+        '<h3 style="margin:0;color:var(--text);font-size:16px;flex:1">Lead</h3>'
+        '<button onclick="closeLeadModal()" style="background:none;border:none;color:var(--text3);'
+        'font-size:18px;cursor:pointer;padding:4px 8px">×</button>'
+        '</div>'
+        '<div id="lead-modal-body" style="font-size:13px;color:var(--text2)">Loading…</div>'
+        '<div id="lead-modal-msg" style="font-size:12px;min-height:16px;margin-top:8px"></div>'
+        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">'
+        '<button onclick="closeLeadModal()" '
+        'style="padding:9px 16px;background:none;border:1px solid var(--border);color:var(--text2);'
+        'border-radius:6px;font-size:13px;cursor:pointer;font-family:inherit">Cancel</button>'
+        '<button id="lead-modal-save" onclick="saveLeadModal()" '
+        'style="padding:9px 20px;background:#059669;border:none;color:#fff;border-radius:6px;'
+        'font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Save</button>'
+        '</div>'
+        '</div>'
+        '</div>'
     )
     route_js = f"""
 const RGK = {repr(gk)};
@@ -284,6 +307,109 @@ function openNextStop() {{
     return s.status === 'Pending' || s.status === 'In Progress';
   }});
   if (next) openRouteSheet(next);
+}}
+
+// ── Lead detail modal ───────────────────────────────────────────────────
+let _leadModalId = null;
+
+async function openLeadModal(leadId) {{
+  _leadModalId = leadId;
+  document.getElementById('lead-modal-msg').textContent = '';
+  document.getElementById('lead-modal-body').textContent = 'Loading…';
+  document.getElementById('lead-modal-bg').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  try {{
+    var r = await fetch('/api/leads/' + leadId);
+    if (!r.ok) {{
+      document.getElementById('lead-modal-body').innerHTML =
+        '<div style="color:#ef4444">Failed to load lead (HTTP ' + r.status + ')</div>';
+      return;
+    }}
+    var L = await r.json();
+    var stages = ['New','Contacted','Appointment Set','Patient Seen','Converted','Dropped'];
+    var st = (L.Status && L.Status.value) || L.Status || 'New';
+    var rs = (L.Reason && L.Reason.value) || L.Reason || '';
+    function row(label, html) {{
+      return '<div style="margin-bottom:10px">'
+        + '<label style="display:block;font-size:10px;font-weight:700;color:var(--text3);'
+        + 'text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">' + esc(label) + '</label>'
+        + html + '</div>';
+    }}
+    var inputCss = 'width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);'
+                 + 'color:var(--text);border-radius:6px;font-size:13px;font-family:inherit';
+    var stageOpts = stages.map(function(s){{
+      return '<option value="' + esc(s) + '"' + (s === st ? ' selected' : '') + '>' + esc(s) + '</option>';
+    }}).join('');
+    var html = ''
+      + row('Name', '<input type="text" id="lm-name" style="' + inputCss + '" value="' + esc(L.Name || '') + '">')
+      + row('Phone', '<input type="tel" id="lm-phone" style="' + inputCss + '" value="' + esc(L.Phone || '') + '">')
+      + row('Email', '<input type="email" id="lm-email" style="' + inputCss + '" value="' + esc(L.Email || '') + '">')
+      + row('Status', '<select id="lm-status" style="' + inputCss + '">' + stageOpts + '</select>')
+      + row('Reason / Service', '<input type="text" id="lm-reason" style="' + inputCss + '" value="' + esc(rs) + '">')
+      + row('Source', '<input type="text" id="lm-source" style="' + inputCss + ';opacity:.7" value="' + esc(L.Source || '') + '" readonly>')
+      + row('Follow-Up Date', '<input type="date" id="lm-fu" style="' + inputCss + '" value="' + esc((L['Follow-Up Date'] || '').slice(0,10)) + '">')
+      + row('Notes', '<textarea id="lm-notes" rows="3" style="' + inputCss + ';resize:vertical">' + esc(L.Notes || '') + '</textarea>')
+      + '<div style="font-size:11px;color:var(--text3);margin-top:6px">Created: ' + esc((L.Created || '').slice(0,10) || '—')
+      + (L.Owner ? ' · Owner: ' + esc(L.Owner) : '') + '</div>';
+    document.getElementById('lead-modal-body').innerHTML = html;
+    // Trigger phone formatting on the prefilled value
+    var phEl = document.getElementById('lm-phone');
+    if (phEl && typeof formatPhone === 'function') formatPhone(phEl);
+  }} catch (e) {{
+    document.getElementById('lead-modal-body').innerHTML =
+      '<div style="color:#ef4444">Network error: ' + esc(e.message || e) + '</div>';
+  }}
+}}
+
+function closeLeadModal() {{
+  document.getElementById('lead-modal-bg').style.display = 'none';
+  document.body.style.overflow = '';
+  _leadModalId = null;
+}}
+
+async function saveLeadModal() {{
+  if (!_leadModalId) return;
+  var msg = document.getElementById('lead-modal-msg');
+  var btn = document.getElementById('lead-modal-save');
+  msg.textContent = '';
+  btn.disabled = true; btn.textContent = 'Saving…';
+  var get = function(id) {{ var el = document.getElementById(id); return el ? el.value.trim() : ''; }};
+  var payload = {{
+    'Name':   get('lm-name'),
+    'Phone':  get('lm-phone'),
+    'Email':  get('lm-email'),
+    'Status': get('lm-status'),
+    'Reason': get('lm-reason'),
+    'Notes':  get('lm-notes'),
+  }};
+  var fu = get('lm-fu');
+  payload['Follow-Up Date'] = fu || null;
+  try {{
+    var r = await fetch('/api/leads/' + _leadModalId, {{
+      method: 'PATCH',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify(payload),
+    }});
+    if (!r.ok) {{
+      var err = '';
+      try {{ err = (await r.json()).error || ''; }} catch (e) {{}}
+      msg.style.color = '#ef4444';
+      msg.textContent = 'Save failed: ' + (err || ('HTTP ' + r.status));
+      btn.disabled = false; btn.textContent = 'Save';
+      return;
+    }}
+    msg.style.color = '#059669';
+    msg.textContent = 'Saved ✓';
+    setTimeout(function() {{
+      closeLeadModal();
+      // Re-render the current stop sheet so the leads list reflects edits
+      if (_rCurrentStop) loadRouteVenueData(_rCurrentStop);
+    }}, 600);
+  }} catch (e) {{
+    msg.style.color = '#ef4444';
+    msg.textContent = 'Network error';
+    btn.disabled = false; btn.textContent = 'Save';
+  }}
 }}
 
 // Modal listing skipped / not-reached stops with their reason notes.
@@ -701,6 +827,23 @@ function renderRouteSheet(stop) {{
     var mapsLink = 'https://maps.google.com/?q='+encodeURIComponent(addr);
     html += '<div style="margin-bottom:8px;font-size:13px">\U0001f4cd '+esc(addr)+' <a href="'+mapsLink+'" target="_blank" style="color:#3b82f6;font-size:12px">Navigate \u2197</a></div>';
   }}
+  // Next-stop row \u2014 only meaningful on terminal statuses (the rep just
+  // finished here and needs to advance). Inserted ABOVE the action row
+  // so it's the first thing visible when reviewing a completed stop.
+  if (status === 'Visited' || status === 'Skipped' || status === 'Not Reached') {{
+    var nxt = (_routeData && _routeData.stops || []).find(function(s) {{
+      return s.stop_id !== id && (s.status === 'Pending' || s.status === 'In Progress');
+    }});
+    if (nxt) {{
+      var nxtName = nxt.name || ('Stop ' + (nxt.order || ''));
+      if (nxtName.length > 32) nxtName = nxtName.slice(0, 31) + '\u2026';
+      html += '<div style="padding:4px 0 12px"><button onclick="openRouteSheet(_routeData.stops.find(function(s){{return s.stop_id==='+nxt.stop_id+';}}))" '
+           + 'style="width:100%;background:#ea580c;color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">'
+           + 'Next \u25b6 ' + esc(nxtName) + '</button></div>';
+    }} else {{
+      html += '<div style="padding:8px 0 12px;text-align:center;font-size:13px;color:#059669;font-weight:600">\u2713 Route complete</div>';
+    }}
+  }}
   // Action buttons by status. Pending \u2192 Arrive (one tap \u2192 In Progress, sets
   // Arrived At); In Progress \u2192 Check In (opens visit form, marks Visited,
   // sets Departed At + computes Duration Mins).
@@ -966,7 +1109,8 @@ async function loadRouteVenueData(stop) {{
         var line2 = '';
         if (ph) line2 += esc(ph);
         if (rs) line2 += (line2 ? ' • ' : '') + esc(rs);
-        return '<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">'
+        return '<div onclick="openLeadModal('+L.id+')" '
+             + 'style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer">'
              + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
              + '<span style="font-weight:600">'+esc(nm)+'</span>'
              + '<span style="background:'+col+'22;color:'+col+';font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap">'+esc(st)+'</span>'

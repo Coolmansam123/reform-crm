@@ -161,6 +161,21 @@ def _mobile_page(active: str, title: str, body_html: str, script_js: str,
         'function closeMDrawer(){'
         'document.getElementById("m-drawer").classList.remove("open");'
         'document.getElementById("m-drawer-backdrop").classList.remove("open");}'
+        # ── Phone auto-format ──────────────────────────────────────────────
+        # Any input[type=tel] gets formatted to (XXX)XXX-XXXX as the rep types.
+        # Uses event delegation so dynamically-added phone inputs (modals,
+        # forms) pick this up without per-field wiring.
+        'function formatPhone(input){'
+        'var d=(input.value||"").replace(/\\D/g,"").slice(0,10);'
+        'var f=d;'
+        'if(d.length>6) f="("+d.slice(0,3)+")"+d.slice(3,6)+"-"+d.slice(6);'
+        'else if(d.length>3) f="("+d.slice(0,3)+")"+d.slice(3);'
+        'else if(d.length>0) f="("+d;'
+        'input.value=f;}'
+        'document.addEventListener("input",function(e){'
+        'var t=e.target;'
+        'if(t&&t.tagName==="INPUT"&&t.type==="tel") formatPhone(t);'
+        '},true);'
         # ── Push notifications: register sw, expose enableNotifications() ──
         'if ("serviceWorker" in navigator) {'
         '  navigator.serviceWorker.register("/sw.js").catch(function(e){console.warn("sw register failed",e);});'

@@ -364,6 +364,22 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
             json=act_fields,
         )
 
+        # Optional venue Contact Status update — only when the form sent a
+        # non-empty value AND we resolved a venue. Bare string per memory
+        # (Baserow single_select writes don't take dict form).
+        new_status = (fields.get("contact_status") or "").strip()
+        if new_status and venue_id and new_status in (
+            "Not Contacted", "Contacted", "In Discussion", "Active Partner",
+        ):
+            try:
+                await client.patch(
+                    f"{br}/api/database/rows/table/{T_GOR_VENUES}/{venue_id}/?user_field_names=true",
+                    headers=br_headers,
+                    json={"Contact Status": new_status},
+                )
+            except Exception:
+                pass
+
     if ar.status_code not in (200, 201):
         return JSONResponse({"ok": False, "error": ar.text}, status_code=500)
 
