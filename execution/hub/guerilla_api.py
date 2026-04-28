@@ -318,17 +318,19 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
             if int_summary:
                 summary = f"[{interaction_type}] {int_summary}\n\n{summary}"
 
+        # Baserow single_select writes take bare strings, not {"value": ...}
+        # dicts. The dict form is read-only on responses.
         act_fields: dict = {
-            "Type":           {"value": interaction_type},
+            "Type":           interaction_type,
             "Date":           activity_date,
             "Contact Person": contact_person,
             "Summary":        summary,
         }
         if form_type in VALID_FORM_TYPES:
-            act_fields["Source Form"] = {"value": form_type}
+            act_fields["Source Form"] = form_type
         # Outcome: only set if it maps to a valid option; otherwise leave null.
         if outcome in VALID_OUTCOMES:
-            act_fields["Outcome"] = {"value": outcome}
+            act_fields["Outcome"] = outcome
         if venue_id:
             act_fields["Business"]      = [{"id": venue_id}]
         if follow_up:
@@ -337,7 +339,7 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
             event_status = (fields.get("event_status") or "Prospective").strip()
             valid_statuses = {"Prospective", "Approved", "Scheduled", "Completed"}
             if event_status in valid_statuses:
-                act_fields["Event Status"] = {"value": event_status}
+                act_fields["Event Status"] = event_status
 
         ar = await client.post(
             f"{br}/api/database/rows/table/{T_GOR_ACTS}/?user_field_names=true",
@@ -357,7 +359,7 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
         slug = hashlib.sha256(f"{form_type}-{today}-{secrets.token_urlsafe(8)}".encode()).hexdigest()[:12]
         ev_fields = {
             "Name": fields.get("event_name") or fields.get("company") or f"{form_type} - {today}",
-            "Event Type": {"value": form_type},
+            "Event Type": form_type,
             "Event Date": fields.get("event_date") or today,
             "Form Slug": slug,
             "Created By": user_name or user.get("email", ""),
@@ -366,7 +368,7 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
         if form_type == "External Event":
             ev_status = (fields.get("event_status") or "Prospective").strip()
             if ev_status in {"Prospective", "Approved", "Scheduled", "Completed"}:
-                ev_fields["Event Status"] = {"value": ev_status}
+                ev_fields["Event Status"] = ev_status
             if fields.get("organizer"):
                 ev_fields["Organizer"] = fields["organizer"]
             if fields.get("organizer_phone"):
@@ -378,7 +380,7 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
             if flyer_url:
                 ev_fields["Flyer URL"] = flyer_url
         else:
-            ev_fields["Event Status"] = {"value": "Scheduled"}
+            ev_fields["Event Status"] = "Scheduled"
         if fields.get("address") or fields.get("event_address"):
             ev_fields["Venue Address"] = fields.get("address") or fields.get("event_address")
         if fields.get("anticipated_count"):
@@ -391,7 +393,7 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
         if fields.get("industry"):
             ev_fields["Industry"] = fields["industry"]
         if fields.get("indoor_outdoor"):
-            ev_fields["Indoor Outdoor"] = {"value": fields["indoor_outdoor"]}
+            ev_fields["Indoor Outdoor"] = fields["indoor_outdoor"]
         if venue_id:
             ev_fields["Business"] = [{"id": venue_id}]
         try:
