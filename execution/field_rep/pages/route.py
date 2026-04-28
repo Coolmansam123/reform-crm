@@ -38,6 +38,9 @@ def _mobile_route_page(br: str, bt: str, user: dict = None,
         '<a href="/routes" style="font-size:12px;color:var(--text3);text-decoration:none">\u2190 Routes</a>'
         '</div>'
         '<div id="rt-count" style="font-size:12px;color:var(--text3);margin-top:3px"></div>'
+        '<div id="rt-leftovers" onclick="openLeftoversPanel();return false;" '
+        'style="display:none;margin-top:4px;font-size:11px;font-weight:600;'
+        'color:#f97316;cursor:pointer"></div>'
         '<div style="margin-top:6px;background:var(--border);border-radius:4px;height:5px;overflow:hidden">'
         '<div id="rt-bar" style="height:100%;background:#ea580c;border-radius:4px;width:0%"></div>'
         '</div>'
@@ -225,6 +228,57 @@ function updateProgress() {{
   document.getElementById('rt-bar').style.width = pct + '%';
   var actionsEl = document.getElementById('rt-actions');
   if (actionsEl) actionsEl.style.display = anyStop ? 'flex' : 'none';
+  // Leftovers chip \u2014 surfaces stops that were skipped or not reached so the
+  // rep knows they were set aside (the map filter hides them for clarity).
+  var leftEl = document.getElementById('rt-leftovers');
+  if (leftEl) {{
+    var bits = [];
+    if (skipped) bits.push(skipped + ' skipped');
+    if (notReached) bits.push(notReached + ' not reached');
+    if (bits.length) {{
+      leftEl.textContent = '\u26a0\ufe0f ' + bits.join(' \u00b7 ') + ' \u2014 tap to view';
+      leftEl.style.display = 'block';
+    }} else {{
+      leftEl.style.display = 'none';
+    }}
+  }}
+}}
+
+// Modal listing skipped / not-reached stops with their reason notes.
+function openLeftoversPanel() {{
+  if (!_routeData || !_routeData.stops) return;
+  var stops = _routeData.stops.filter(function(s) {{
+    return s.status === 'Skipped' || s.status === 'Not Reached';
+  }});
+  if (!stops.length) return;
+  var bg = document.createElement('div');
+  bg.id = 'rt-leftovers-modal';
+  bg.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1100;'
+    + 'display:flex;align-items:flex-end;justify-content:center';
+  bg.onclick = function(e) {{ if (e.target === bg) bg.remove(); }};
+  var panel = document.createElement('div');
+  panel.style.cssText = 'background:var(--bg2);width:100%;max-height:70vh;overflow-y:auto;'
+    + 'border-radius:18px 18px 0 0;padding:16px 18px calc(20px + env(safe-area-inset-bottom));';
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    + '<div style="font-size:15px;font-weight:700">Set-aside stops</div>'
+    + '<button onclick="document.getElementById(\\'rt-leftovers-modal\\').remove()" '
+    + 'style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px 8px">\u00d7</button>'
+    + '</div>';
+  stops.forEach(function(s) {{
+    var color = s.status === 'Skipped' ? '#f97316' : '#ef4444';
+    var note = (s.notes || '').trim();
+    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">'
+      + '<div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(s.name || '(unnamed)') + '</div>'
+      + '<span style="background:' + color + '22;color:' + color + ';font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;white-space:nowrap">' + esc(s.status) + '</span>'
+      + '</div>'
+      + (s.address ? '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">' + esc(s.address) + '</div>' : '')
+      + (note ? '<div style="font-size:12px;color:var(--text2);font-style:italic">"' + esc(note) + '"</div>' : '<div style="font-size:11px;color:var(--text4)">No reason captured.</div>')
+      + '</div>';
+  }});
+  panel.innerHTML = html;
+  bg.appendChild(panel);
+  document.body.appendChild(bg);
 }}
 
 function initRouteMap() {{
@@ -257,7 +311,14 @@ function renderRouteStops() {{
   if (_rPolyline) {{ _rPolyline.setMap(null); _rPolyline = null; }}
   if (_rDirections) {{ _rDirections.setMap(null); _rDirections = null; }}
   _rLastDirections = null;
-  var stops = _routeData.stops || [];
+  // Only render Pending + In Progress on the active map. Visited/Skipped/
+  // Not Reached are kept in the data (and surfaced via the leftovers chip
+  // in the progress bar) but excluded from the polyline so the route
+  // visually shrinks as the rep completes stops.
+  var allStops = _routeData.stops || [];
+  var stops = allStops.filter(function(s) {{
+    return s.status === 'Pending' || s.status === 'In Progress';
+  }});
   var bounds = new google.maps.LatLngBounds();
   var pathCoords = [];
 
@@ -289,7 +350,7 @@ function renderRouteStops() {{
     (function(s) {{ marker.addListener('click', function() {{ openRouteSheet(s); }}); }})(stop);
     _rMarkers[stop.stop_id] = marker;
   }});
-  // Close the loop: return to office at the end of the route.
+  // Close the loop: return to office at the end of the active stops.
   if (pathCoords.length > 1) {{
     pathCoords.push(officePos);
     _drawDirectionsOrFallback(pathCoords);
@@ -1046,24 +1107,26 @@ async function markRouteStop(stopId, status, callback, reason) {{
     var r = await fetch({route_endpoint!r});
     _routeData = await r.json();
     updateProgress();
-    // Update marker color
-    var freshStop = null;
-    if (_rMarkers[stopId] && _rMap) {{
-      var color = _STATUS_COLORS[status] || '#4285f4';
-      freshStop = (_routeData.stops||[]).find(function(s){{return s.stop_id===stopId;}});
-      var idx = freshStop ? freshStop.order : '?';
-      _rMarkers[stopId].setIcon({{path:google.maps.SymbolPath.CIRCLE,scale:14,fillColor:color,fillOpacity:1,strokeColor:'#fff',strokeWeight:2}});
-      _rMarkers[stopId].setLabel({{text:String(idx),color:'#fff',fontWeight:'700',fontSize:'12px'}});
-    }}
-    // Arrive (In Progress) is mid-flow — keep the sheet open and re-render so
-    // the user immediately sees the Check In button. Visited/Skipped/Not
-    // Reached are terminal — close the sheet.
-    if (status === 'In Progress' && freshStop) {{
-      _rCurrentStop = freshStop;
-      document.getElementById('m-sheet-body').innerHTML = renderRouteSheet(freshStop);
-      loadRouteVenueData(freshStop);
+    var freshStop = (_routeData.stops||[]).find(function(s){{return s.stop_id===stopId;}});
+    // Arrive (In Progress) is mid-flow — keep the sheet open + re-render the
+    // existing marker color so the rep sees the Check In button. Visited /
+    // Skipped / Not Reached are terminal — close the sheet AND re-render the
+    // whole map so the completed stop drops off and remaining stops renumber.
+    if (status === 'In Progress') {{
+      if (_rMarkers[stopId]) {{
+        var color = _STATUS_COLORS[status] || '#4285f4';
+        var idx = freshStop ? freshStop.order : '?';
+        _rMarkers[stopId].setIcon({{path:google.maps.SymbolPath.CIRCLE,scale:14,fillColor:color,fillOpacity:1,strokeColor:'#fff',strokeWeight:2}});
+        _rMarkers[stopId].setLabel({{text:String(idx),color:'#fff',fontWeight:'700',fontSize:'12px'}});
+      }}
+      if (freshStop) {{
+        _rCurrentStop = freshStop;
+        document.getElementById('m-sheet-body').innerHTML = renderRouteSheet(freshStop);
+        loadRouteVenueData(freshStop);
+      }}
     }} else {{
       closeRouteSheet();
+      renderRouteStops();
     }}
     if (callback) callback();
   }} catch(e) {{
