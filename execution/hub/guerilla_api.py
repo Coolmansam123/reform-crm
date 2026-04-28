@@ -82,13 +82,20 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
     async with httpx.AsyncClient(timeout=60) as client:
         br_headers = {"Authorization": f"Token {bt}", "Content-Type": "application/json"}
 
-        # ── Venue upsert (Forms 1, 3, 4, 5) ───────────────────────────────
+        # ── Venue resolution ──────────────────────────────────────────────
+        # Caller can pass an explicit venue_id (route Check-In flow already
+        # knows the venue) — that wins. Otherwise we name-lookup/upsert for
+        # the form types that include a business field.
         venue_id = None
+        explicit_vid = fields.get("venue_id")
+        if explicit_vid not in (None, ""):
+            try: venue_id = int(explicit_vid)
+            except (ValueError, TypeError): pass
         FORMS_WITH_VENUE = {
             "Business Outreach Log", "Mobile Massage Service",
             "Lunch and Learn", "Health Assessment Screening",
         }
-        if form_type in FORMS_WITH_VENUE:
+        if not venue_id and form_type in FORMS_WITH_VENUE:
             company_name = (
                 fields.get("company_name") or fields.get("business_name") or ""
             ).strip()

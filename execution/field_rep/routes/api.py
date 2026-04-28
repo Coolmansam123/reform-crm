@@ -133,6 +133,11 @@ async def guerilla_log(request: Request):
     resp = await guerilla_api.guerilla_log(request, br, bt, session,
                                            bunny_zone=bzone, bunny_key=bkey,
                                            bunny_cdn_base=bcdn)
+    # Drop cached snapshots so the next read (briefing + visit history) picks
+    # up the row we just wrote. Without this the rep sees "No prior visits"
+    # right after a successful Check-In submit.
+    if 200 <= resp.status_code < 300:
+        await _invalidate(T_GOR_ACTS, T_GOR_VENUES, T_EVENTS)
     return resp
 
 

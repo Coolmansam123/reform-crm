@@ -73,6 +73,13 @@ def _mobile_route_page(br: str, bt: str, user: dict = None,
         '<div id="loc-pill" style="display:none;position:fixed;left:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:90;'
         'background:rgba(15,23,42,.72);color:#e2e8f0;border-radius:14px;padding:5px 10px;'
         'font-size:10px;font-weight:600;backdrop-filter:blur(6px)">📍 Location shared while on route</div>'
+        # "Next Stop ▶" floating pill — visible when there's a Pending/In
+        # Progress stop after the current one. Tap to open that stop's sheet.
+        '<button id="next-stop-pill" onclick="openNextStop()" '
+        'style="display:none;position:fixed;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:95;'
+        'background:#ea580c;color:#fff;border:none;border-radius:22px;padding:10px 16px;'
+        'font-size:13px;font-weight:700;box-shadow:0 4px 12px rgba(234,88,12,.4);cursor:pointer;font-family:inherit;'
+        'max-width:60vw;text-align:left;line-height:1.2"></button>'
     )
     route_js = f"""
 const RGK = {repr(gk)};
@@ -242,6 +249,30 @@ function updateProgress() {{
       leftEl.style.display = 'none';
     }}
   }}
+  // Next Stop pill \u2014 show the next active stop (Pending or In Progress) so
+  // the rep can advance after reviewing a check-in without hunting the map.
+  var pill = document.getElementById('next-stop-pill');
+  if (pill) {{
+    var next = stops.find(function(s) {{
+      return s.status === 'Pending' || s.status === 'In Progress';
+    }});
+    if (next) {{
+      var label = next.name || 'Stop ' + (next.order || '');
+      if (label.length > 28) label = label.slice(0, 27) + '\u2026';
+      pill.textContent = 'Next \u25b6 ' + label;
+      pill.style.display = 'inline-block';
+    }} else {{
+      pill.style.display = 'none';
+    }}
+  }}
+}}
+
+function openNextStop() {{
+  if (!_routeData || !_routeData.stops) return;
+  var next = _routeData.stops.find(function(s) {{
+    return s.status === 'Pending' || s.status === 'In Progress';
+  }});
+  if (next) openRouteSheet(next);
 }}
 
 // Modal listing skipped / not-reached stops with their reason notes.
@@ -1048,6 +1079,13 @@ function routeCheckInForm() {{
   // _rCurrentStop, and reading .name on null in the setTimeout callback
   // would throw and prevent the form from ever opening.
   var stop = _rCurrentStop;
+  // Stash venue id + name so s2Submit can pass them to /api/guerilla/log.
+  // Without this, guerilla_log can't link the activity to the venue (the s2
+  // 'Interaction Only' form_type doesn't trigger the name-based lookup) and
+  // the activity never appears in this stop's Visit History.
+  window._routeCheckInVenueId = stop.venue_id || null;
+  window._routeCheckInBusinessName = stop.name || '';
+  window._routeCheckInStopId = stop.stop_id || null;
   closeRouteSheet();
   s2Reset();
   setTimeout(function() {{
@@ -1109,9 +1147,10 @@ async function markRouteStop(stopId, status, callback, reason) {{
     updateProgress();
     var freshStop = (_routeData.stops||[]).find(function(s){{return s.stop_id===stopId;}});
     // Arrive (In Progress) is mid-flow — keep the sheet open + re-render the
-    // existing marker color so the rep sees the Check In button. Visited /
-    // Skipped / Not Reached are terminal — close the sheet AND re-render the
-    // whole map so the completed stop drops off and remaining stops renumber.
+    // existing marker color so the rep sees the Check In button.
+    // Visited reopens the sheet on the just-completed stop so the rep can
+    // review the new activity in Visit History before tapping Next Stop.
+    // Skipped / Not Reached are terminal — close the sheet outright.
     if (status === 'In Progress') {{
       if (_rMarkers[stopId]) {{
         var color = _STATUS_COLORS[status] || '#4285f4';
@@ -1123,6 +1162,13 @@ async function markRouteStop(stopId, status, callback, reason) {{
         _rCurrentStop = freshStop;
         document.getElementById('m-sheet-body').innerHTML = renderRouteSheet(freshStop);
         loadRouteVenueData(freshStop);
+      }}
+    }} else if (status === 'Visited') {{
+      renderRouteStops();  // marker drops, others renumber
+      if (freshStop) {{
+        // Re-open the sheet (closeRouteSheet was called by routeCheckInForm
+        // before the form opened). Rep sees updated state + new activity.
+        openRouteSheet(freshStop);
       }}
     }} else {{
       closeRouteSheet();

@@ -1077,6 +1077,13 @@ async function s2Submit(){
     interaction_summary:intSummary,
     has_event:hasEvent
   };
+  // When this form is the route Check-In, pass through the venue id so
+  // guerilla_log can link the activity to the venue (otherwise the activity
+  // shows up nowhere in the rep's Visit History for that stop).
+  if (window._routeCheckInVenueId) {
+    fields.venue_id = window._routeCheckInVenueId;
+    fields.business_name = window._routeCheckInBusinessName || '';
+  }
   var formType='Interaction Only';
   var flyer=null;
 
