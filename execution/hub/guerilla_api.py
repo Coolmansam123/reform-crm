@@ -268,6 +268,16 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
 
         summary = "".join(l for l in lines if l is not None).strip()
 
+        # For Interaction Only the structured fields (Type / Outcome / Contact
+        # Person / Follow-Up Date) are already captured on dedicated columns.
+        # Storing the Form/Submitted-by/Type/Outcome/... blob in Summary too
+        # turns Visit History rendering into noise. Use just the user's
+        # free-text note.
+        if form_type == "Interaction Only":
+            user_note = (fields.get("interaction_summary") or "").strip()
+            if user_note:
+                summary = user_note
+
         # ── Derive date, contact, follow-up, outcome ───────────────────────
         if form_type == "Business Outreach Log":
             activity_date  = today

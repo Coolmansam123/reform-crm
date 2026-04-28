@@ -437,7 +437,10 @@ function renderInfoTab() {{
     var vh = '';
     visits.forEach(function(a) {{
       var type  = svJS(a.Type) || '';
-      var summ  = a.Summary || '';
+      // Strip legacy form-blob prefix; surface just the user's note.
+      var rawSumm = a.Summary || '';
+      var matchSumm = rawSumm.match(/What Happened:\s*([\s\S]*?)(?:\n[A-Z][\w \-]+:\s|$)/);
+      var summ = matchSumm && matchSumm[1] ? matchSumm[1].trim() : rawSumm.trim();
       var when  = a.Created || a.Date || '';
       var who   = a.Author || '';
       var sent  = svJS(a.Sentiment) || '';

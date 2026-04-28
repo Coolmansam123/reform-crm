@@ -96,6 +96,17 @@ var _rCurrentStop = null;  // currently selected stop (full venue data)
 var _userLat = null, _userLng = null, _userMarker = null;
 var _allBoxesCache = null;  // cached boxes for pickup badges
 
+// Pull the user-typed note out of an Activity Summary. Old guerilla_log
+// rows stored the full form blob (Form: / Submitted by: / Type: / ...).
+// New rows (post-2026-04-27) store just the note. Either way, return the
+// "What Happened" portion if present, else the full summary.
+function _cleanNote(s) {{
+  if (!s) return '';
+  var m = s.match(/What Happened:\s*([\s\S]*?)(?:\n[A-Z][\\w \\-]+:\s|$)/);
+  if (m && m[1]) return m[1].trim();
+  return s.trim();
+}}
+
 function _haversine(lat1, lng1, lat2, lng2) {{
   var R = 3958.8; // miles
   var dLat = (lat2-lat1)*Math.PI/180;
@@ -811,7 +822,7 @@ async function loadRouteVenueData(stop) {{
       }}
       brief += '<div style="font-size:13px;line-height:1.5;color:var(--text2)">';
       if (daysAgo) brief += '<div>'+dot+'<strong>Last visit</strong> · '+esc(daysAgo)+'</div>';
-      var noteText = latest.Summary || '';
+      var noteText = _cleanNote(latest.Summary || '');
       if (noteText) {{
         var note = noteText.length > 80 ? noteText.slice(0, 80) + '…' : noteText;
         brief += '<div style="margin-top:4px;font-style:italic;color:var(--text)">"'+esc(note)+'"</div>';
@@ -891,7 +902,7 @@ async function loadRouteVenueData(stop) {{
         var t = (a['Type'] && a['Type'].value) || a['Type'] || '';
         var o = (a['Outcome'] && a['Outcome'].value) || a['Outcome'] || '';
         var d = a['Date'] || (a['Created']||'').slice(0,10);
-        var sm = a['Summary'] || '';
+        var sm = _cleanNote(a['Summary'] || '');
         var sentV = (a.Sentiment && a.Sentiment.value) || a.Sentiment || '';
         var photo = (a['Photo URL'] || '').trim();
         var audio = (a['Audio URL'] || '').trim();
