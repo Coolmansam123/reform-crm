@@ -339,7 +339,7 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
         if outcome in VALID_OUTCOMES:
             act_fields["Outcome"] = outcome
         if venue_id:
-            act_fields["Business"]      = [{"id": venue_id}]
+            act_fields["Business"]      = [venue_id]
         if follow_up:
             act_fields["Follow-Up Date"] = follow_up
         if form_type == "External Event":
@@ -402,7 +402,7 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
         if fields.get("indoor_outdoor"):
             ev_fields["Indoor Outdoor"] = fields["indoor_outdoor"]
         if venue_id:
-            ev_fields["Business"] = [{"id": venue_id}]
+            ev_fields["Business"] = [venue_id]
         try:
             async with httpx.AsyncClient(timeout=60) as ev_client:
                 er = await ev_client.post(
