@@ -887,6 +887,10 @@ function _gfrSuccess(fid,actId){
   document.querySelector('#gfr-form-'+fid+' .gfr-modal').appendChild(s);
   document.getElementById('gfr-la-'+fid).onclick=function(){closeGFRForm(fid);};
   document.getElementById('gfr-cl-'+fid).onclick=function(){closeGFRForm(fid);};
+  // Forms s2-s5 reused as the route Check-In form: notify the route page so
+  // it can flip the stop status to Visited (matches the bol form behavior at
+  // the bottom of _GFR_JS).
+  if (typeof _onFormSubmitSuccess === 'function') _onFormSubmitSuccess();
 }
 async function _gfrDoSubmit(fid,ftype,fields,btn){
   try{

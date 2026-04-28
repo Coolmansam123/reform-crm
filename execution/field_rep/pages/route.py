@@ -1214,7 +1214,7 @@ async function _pingRepLocation() {{
       body: JSON.stringify({{
         lat: _userLat,
         lng: _userLng,
-        route_id: _routeData.route_id || null,
+        route_id: (_routeData.route && _routeData.route.id) || null,
       }}),
     }});
   }} catch (e) {{}}
