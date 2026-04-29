@@ -263,12 +263,13 @@ function updateProgress() {{
       leftEl.style.display = 'none';
     }}
   }}
-  // Next Stop pill \u2014 show the next active stop (Pending or In Progress) so
-  // the rep can advance after reviewing a check-in without hunting the map.
+  // Next Stop pill \u2014 show the next destination (first Pending stop). When
+  // a stop is In Progress, the rep is *at* it; "next" means where to go after.
+  // Pill hides when no Pending stops remain (route effectively done).
   var pill = document.getElementById('next-stop-pill');
   if (pill) {{
     var next = stops.find(function(s) {{
-      return s.status === 'Pending' || s.status === 'In Progress';
+      return s.status === 'Pending';
     }});
     if (next) {{
       var label = next.name || 'Stop ' + (next.order || '');
@@ -356,21 +357,21 @@ function renderRouteStops() {{
   if (_rPolyline) {{ _rPolyline.setMap(null); _rPolyline = null; }}
   if (_rDirections) {{ _rDirections.setMap(null); _rDirections = null; }}
   _rLastDirections = null;
-  // Visible stops on the active map = pending + in-progress, plus the most
-  // recently completed stop pinned as the "you are here" anchor (drawn as
-  // #1 so the rep can see where they just came from). Older completed
-  // stops drop off the map; the leftovers chip in the progress bar still
-  // surfaces Skipped / Not Reached for review.
+  // Visible stops on the active map = pending stops + a single "you are here"
+  // anchor (drawn as #1). The anchor is the In Progress stop if one exists
+  // (rep is physically there now); otherwise it's the most recently completed
+  // stop. Either way, older completed stops drop off the map; the leftovers
+  // chip in the progress bar still surfaces Skipped / Not Reached for review.
   var allStops = _routeData.stops || [];
   var _doneStatuses = ['Visited','Skipped','Not Reached'];
-  var pending = allStops.filter(function(s) {{
-    return s.status === 'Pending' || s.status === 'In Progress';
-  }});
+  var pendingOnly = allStops.filter(function(s) {{ return s.status === 'Pending'; }});
+  var inProgressStop = allStops.find(function(s) {{ return s.status === 'In Progress'; }}) || null;
   var _completedSeq = allStops.filter(function(s) {{
     return _doneStatuses.indexOf(s.status) >= 0;
   }});
-  var anchorStop = _completedSeq.length ? _completedSeq[_completedSeq.length - 1] : null;
-  var stops = anchorStop ? [anchorStop].concat(pending) : pending;
+  var anchorStop = inProgressStop
+    || (_completedSeq.length ? _completedSeq[_completedSeq.length - 1] : null);
+  var stops = anchorStop ? [anchorStop].concat(pendingOnly) : pendingOnly;
   var bounds = new google.maps.LatLngBounds();
   var pathCoords = [];
 
@@ -1174,12 +1175,9 @@ async function markRouteStop(stopId, status, callback, reason) {{
     // review the new activity in Visit History before tapping Next Stop.
     // Skipped / Not Reached are terminal — close the sheet outright.
     if (status === 'In Progress') {{
-      if (_rMarkers[stopId]) {{
-        var color = _STATUS_COLORS[status] || '#4285f4';
-        var idx = freshStop ? freshStop.order : '?';
-        _rMarkers[stopId].setIcon({{path:google.maps.SymbolPath.CIRCLE,scale:14,fillColor:color,fillOpacity:1,strokeColor:'#fff',strokeWeight:2}});
-        _rMarkers[stopId].setLabel({{text:String(idx),color:'#fff',fontWeight:'700',fontSize:'12px'}});
-      }}
+      // Full map re-render: In Progress becomes the new anchor, older completed
+      // stops drop off, remaining pins renumber, polyline re-routes from here.
+      renderRouteStops();
       if (freshStop) {{
         _rCurrentStop = freshStop;
         document.getElementById('m-sheet-body').innerHTML = renderRouteSheet(freshStop);
