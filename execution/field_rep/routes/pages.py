@@ -14,6 +14,7 @@ from hub.access import _is_admin
 from field_rep.pages import (
     _mobile_company_detail_page,
     _mobile_directory_page,
+    _mobile_events_page,
     _mobile_home_page,
     _mobile_lead_capture_page,
     _mobile_map_page,
@@ -79,6 +80,16 @@ async def lead_capture(request: Request):
     if not user:
         return RedirectResponse(url="/login")
     return HTMLResponse(_mobile_lead_capture_page(br, bt, user=user))
+
+
+@router.get("/events", response_class=HTMLResponse)
+async def events_page(request: Request):
+    """Field-rep events list. Read-only for reps; admins get inline edits
+    on the detail modal (Event Status / Checked In / Decision Notes)."""
+    user, br, bt = await _guard(request)
+    if not user:
+        return RedirectResponse(url="/login")
+    return HTMLResponse(_mobile_events_page(br, bt, user=user))
 
 
 @router.get("/recent", response_class=HTMLResponse)

@@ -309,12 +309,20 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
             follow_up      = None
             outcome        = "Booking Requested"
 
-        # ── Create T_GOR_ACTS record ───────────────────────────────────────
+        # ── Form type categorization ───────────────────────────────────────
+        # Event-type forms write to T_EVENTS only (built lower); interaction-
+        # type forms write to T_GOR_ACTS here. Splitting these so the
+        # activities table stops being a mixed bag of interactions + events.
         VALID_FORM_TYPES = {
             "Business Outreach Log", "External Event",
             "Mobile Massage Service", "Lunch and Learn",
             "Health Assessment Screening", "Interaction Only",
         }
+        EVENT_FORM_TYPES = {
+            "External Event", "Mobile Massage Service",
+            "Lunch and Learn", "Health Assessment Screening",
+        }
+        is_event = form_type in EVENT_FORM_TYPES
         VALID_INTERACTION_TYPES = {"Call", "Email", "Drop-In", "Meeting", "Mail", "Other"}
         VALID_OUTCOMES = {"No Answer", "Left Message", "Spoke With",
                            "Scheduled Meeting", "Declined", "Follow-Up Needed"}
@@ -335,50 +343,48 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
             if int_summary:
                 summary = f"[{interaction_type}] {int_summary}\n\n{summary}"
 
+        # ── Create T_GOR_ACTS record (interaction-type forms only) ──────────
         # Baserow single_select writes take bare strings, not {"value": ...}
         # dicts. The dict form is read-only on responses.
-        act_fields: dict = {
-            "Type":           interaction_type,
-            "Date":           activity_date,
-            "Contact Person": contact_person,
-            "Summary":        summary,
-        }
-        if form_type in VALID_FORM_TYPES:
-            act_fields["Source Form"] = form_type
-        # Outcome: only set if it maps to a valid option; otherwise leave null.
-        if outcome in VALID_OUTCOMES:
-            act_fields["Outcome"] = outcome
-        if venue_id:
-            act_fields["Business"]      = [venue_id]
-        if follow_up:
-            act_fields["Follow-Up Date"] = follow_up
-        if form_type == "External Event":
-            event_status = (fields.get("event_status") or "Prospective").strip()
-            valid_statuses = {"Prospective", "Approved", "Scheduled", "Completed"}
-            if event_status in valid_statuses:
-                act_fields["Event Status"] = event_status
-        # Optional sentiment / photo / audio / transcript (added 2026-04-28
-        # alongside the s2 Check-In sentiment/voice/photo features).
-        # T_GOR_ACTS columns: Sentiment (single_select Green/Yellow/Red),
-        # Photo URL, Audio URL, Transcript. Bare string for the single_select.
-        sentiment = (fields.get("sentiment") or "").strip()
-        if sentiment in ("Green", "Yellow", "Red"):
-            act_fields["Sentiment"] = sentiment
-        photo_url = (fields.get("photo_url") or "").strip()
-        if photo_url:
-            act_fields["Photo URL"] = photo_url
-        audio_url = (fields.get("audio_url") or "").strip()
-        if audio_url:
-            act_fields["Audio URL"] = audio_url
-        transcript = (fields.get("transcript") or "").strip()
-        if transcript:
-            act_fields["Transcript"] = transcript
+        ar = None
+        if not is_event:
+            act_fields: dict = {
+                "Type":           interaction_type,
+                "Date":           activity_date,
+                "Contact Person": contact_person,
+                "Summary":        summary,
+            }
+            if form_type in VALID_FORM_TYPES:
+                act_fields["Source Form"] = form_type
+            # Outcome: only set if it maps to a valid option; otherwise leave null.
+            if outcome in VALID_OUTCOMES:
+                act_fields["Outcome"] = outcome
+            if venue_id:
+                act_fields["Business"]      = [venue_id]
+            if follow_up:
+                act_fields["Follow-Up Date"] = follow_up
+            # Optional sentiment / photo / audio / transcript (added 2026-04-28
+            # alongside the s2 Check-In sentiment/voice/photo features).
+            # T_GOR_ACTS columns: Sentiment (single_select Green/Yellow/Red),
+            # Photo URL, Audio URL, Transcript. Bare string for the single_select.
+            sentiment = (fields.get("sentiment") or "").strip()
+            if sentiment in ("Green", "Yellow", "Red"):
+                act_fields["Sentiment"] = sentiment
+            photo_url = (fields.get("photo_url") or "").strip()
+            if photo_url:
+                act_fields["Photo URL"] = photo_url
+            audio_url = (fields.get("audio_url") or "").strip()
+            if audio_url:
+                act_fields["Audio URL"] = audio_url
+            transcript = (fields.get("transcript") or "").strip()
+            if transcript:
+                act_fields["Transcript"] = transcript
 
-        ar = await client.post(
-            f"{br}/api/database/rows/table/{T_GOR_ACTS}/?user_field_names=true",
-            headers=br_headers,
-            json=act_fields,
-        )
+            ar = await client.post(
+                f"{br}/api/database/rows/table/{T_GOR_ACTS}/?user_field_names=true",
+                headers=br_headers,
+                json=act_fields,
+            )
 
         # Optional venue Contact Status update — only when the form sent a
         # non-empty value AND we resolved a venue. Bare string per memory
@@ -396,15 +402,15 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
             except Exception:
                 pass
 
-    if ar.status_code not in (200, 201):
-        return JSONResponse({"ok": False, "error": ar.text}, status_code=500)
+    activity_id = None
+    if ar is not None:
+        if ar.status_code not in (200, 201):
+            return JSONResponse({"ok": False, "error": ar.text}, status_code=500)
+        activity_id = ar.json().get("id")
 
-    activity_id = ar.json().get("id")
-
-    # ── Auto-create T_EVENTS row for event-type forms ────────────────────
+    # ── Create T_EVENTS row for event-type forms ────────────────────────
     event_id = None
-    EVENT_FORM_TYPES = {"External Event", "Mobile Massage Service", "Lunch and Learn", "Health Assessment Screening"}
-    if T_EVENTS and form_type in EVENT_FORM_TYPES:
+    if T_EVENTS and is_event:
         slug = hashlib.sha256(f"{form_type}-{today}-{secrets.token_urlsafe(8)}".encode()).hexdigest()[:12]
         ev_fields = {
             "Name": fields.get("event_name") or fields.get("company") or f"{form_type} - {today}",
@@ -414,6 +420,10 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
             "Created By": user_name or user.get("email", ""),
             "Lead Count": 0,
         }
+        # Preserve the multi-line summary blob (Form / Submitted by / fields)
+        # in Notes so no information is lost from dropping the T_GOR_ACTS row.
+        if summary:
+            ev_fields["Notes"] = summary
         if form_type == "External Event":
             ev_status = (fields.get("event_status") or "Prospective").strip()
             if ev_status in {"Prospective", "Approved", "Scheduled", "Completed"}:
@@ -459,7 +469,14 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
         except Exception as e:
             print(f"[guerilla_log] T_EVENTS create error: {e}")
 
-    return JSONResponse({"ok": True, "activity_id": activity_id, "event_id": event_id})
+    # Event-type submissions return the event_id as activity_id so the
+    # existing _gfrSuccess UI ("Activity #N created") still has an id to
+    # display. event_id is also returned explicitly for callers that need it.
+    return JSONResponse({
+        "ok": True,
+        "activity_id": activity_id if activity_id is not None else event_id,
+        "event_id": event_id,
+    })
 
 
 # ─────────────────────────────────────────────────────────────────────────────

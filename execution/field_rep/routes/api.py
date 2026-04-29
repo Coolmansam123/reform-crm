@@ -20,6 +20,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from hub import guerilla_api
+from hub.access import _is_admin
 from hub.constants import (
     T_EVENTS, T_GOR_ACTS, T_GOR_BOXES, T_GOR_ROUTES, T_GOR_ROUTE_STOPS,
     T_GOR_VENUES, T_LEADS,
@@ -140,6 +141,46 @@ async def guerilla_log(request: Request):
     if 200 <= resp.status_code < 300:
         await _invalidate(T_GOR_ACTS, T_GOR_VENUES, T_EVENTS)
     return resp
+
+
+# ─── Events: admin-only patch (Event Status / Checked In / Decision Notes) ──
+_EVENT_STATUSES = {
+    "Prospective", "Maybe", "Approved", "Declined", "Scheduled", "Completed",
+}
+_EVENT_PATCH_ALLOWLIST = {
+    "Event Status", "Checked In", "Decision Notes",
+    "Anticipated Count", "Notes",
+}
+
+
+@router.patch("/api/events/{event_id}")
+async def update_event(event_id: int, request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    if not _is_admin(session):
+        return JSONResponse({"error": "admin only"}, status_code=403)
+    body = await request.json() or {}
+    patch: dict = {}
+    for k, v in body.items():
+        if k not in _EVENT_PATCH_ALLOWLIST:
+            continue
+        if k == "Event Status" and v and v not in _EVENT_STATUSES:
+            return JSONResponse({"error": f"invalid status: {v}"}, status_code=400)
+        patch[k] = v
+    if not patch:
+        return JSONResponse({"error": "no valid fields"}, status_code=400)
+    br, bt = _env()
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.patch(
+            f"{br}/api/database/rows/table/{T_EVENTS}/{event_id}/?user_field_names=true",
+            headers={"Authorization": f"Token {bt}", "Content-Type": "application/json"},
+            json=patch,
+        )
+    if r.status_code >= 300:
+        return JSONResponse({"error": "baserow write failed", "detail": r.text[:400]}, status_code=502)
+    await _invalidate(T_EVENTS)
+    return JSONResponse({"ok": True})
 
 
 # ─── Outreach: overdue follow-ups across categories ─────────────────────────
