@@ -890,9 +890,9 @@ async function loadRouteVenueData(stop) {{
   // Load venue details, activities, events, boxes, companies, leads in parallel
   var results = await Promise.all([
     fetchAll(_GGOR_VENUES), fetchAll(_GGOR_ACTS), fetchAll(_GGOR_BOXES),
-    fetchAll({T_COMPANIES}), fetchAll({T_LEADS})
+    fetchAll({T_COMPANIES}), fetchAll({T_LEADS}), fetchAll({T_EVENTS})
   ]);
-  var venues = results[0], acts = results[1], boxes = results[2], companies = results[3], leads = results[4];
+  var venues = results[0], acts = results[1], boxes = results[2], companies = results[3], leads = results[4], events = results[5];
   var v = venues.find(function(x){{return x.id === venueId;}});
   if (!v) return;
   var id = stop.stop_id;
@@ -1092,24 +1092,25 @@ async function loadRouteVenueData(stop) {{
     leadsEl.innerHTML = lh;
   }}
 
-  // Fill Events tab
+  // Fill Events tab — sourced from T_EVENTS (events table). Older event-type
+  // T_GOR_ACTS rows from before the table-split land in the activities feed
+  // for legacy display elsewhere; this view shows only canonical T_EVENTS.
   var evtsEl = document.getElementById('rv-evts-' + id);
   if (evtsEl) {{
-    var myEvts = acts.filter(function(a) {{
-      var lf = a['Business'];
-      var es = (a['Event Status'] && a['Event Status'].value) || a['Event Status'] || '';
-      return es && Array.isArray(lf) && lf.some(function(r){{return r.id===venueId;}});
-    }}).sort(function(a,b){{return (b['Date']||'').localeCompare(a['Date']||'');}}).slice(0,10);
+    var myEvts = (events || []).filter(function(e) {{
+      var lf = e['Business'];
+      return Array.isArray(lf) && lf.some(function(r){{return r.id===venueId;}});
+    }}).sort(function(a,b){{return (b['Event Date']||'').localeCompare(a['Event Date']||'');}}).slice(0,10);
     var evColors = {{'Prospective':'#3b82f6','Approved':'#10b981','Scheduled':'#8b5cf6','Completed':'#64748b'}};
     evtsEl.innerHTML = myEvts.length
-      ? myEvts.map(function(a) {{
-          var es = (a['Event Status'] && a['Event Status'].value) || '';
-          var t = (a['Type'] && a['Type'].value) || a['Type'] || '';
+      ? myEvts.map(function(e) {{
+          var es = (e['Event Status'] && e['Event Status'].value) || e['Event Status'] || '';
+          var t = (e['Event Type'] && e['Event Type'].value) || e['Event Type'] || '';
           var ec = evColors[es] || '#64748b';
-          return '<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">'
+          return '<a href="/events#' + e.id + '" style="display:block;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;text-decoration:none;color:inherit">'
             + '<span style="font-weight:600">'+esc(t)+'</span> '
             + '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:'+ec+'22;color:'+ec+';font-weight:600">'+esc(es)+'</span>'
-            + '<div style="font-size:11px;color:var(--text3)">'+esc(a['Date']||'')+'</div></div>';
+            + '<div style="font-size:11px;color:var(--text3)">'+esc(e['Event Date']||'')+'</div></a>';
         }}).join('')
       : '<div style="color:var(--text3)">No events yet</div>';
   }}
@@ -1328,6 +1329,7 @@ async function placeRouteBox(stopId) {{
       document.getElementById('rv-box-loc-'+stopId).value='';
       document.getElementById('rv-box-contact-'+stopId).value='';
       setTimeout(function(){{ if(st) st.textContent=''; }}, 3000);
+      if (_rCurrentStop) loadRouteVenueData(_rCurrentStop);
     }} else {{ if (st) {{ st.style.color='#ef4444'; st.textContent='Error'; }} }}
   }} catch(e) {{ if (st) {{ st.style.color='#ef4444'; st.textContent='Network error'; }} }}
 }}

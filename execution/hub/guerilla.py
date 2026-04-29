@@ -269,7 +269,12 @@ function openGFRForm(ft){
   // Stages 3 & 4 will add further cases here
 }
 function closeGFRForm(id){
-  saveDraft(id);
+  // _gfrSuccess() appends a .gfr-success element when the form has been
+  // submitted. In that state the body is hidden but inputs are still
+  // populated; calling saveDraft would re-save the just-submitted data
+  // and resurrect the "Draft restored" banner on the next open.
+  var submitted = !!document.querySelector('#gfr-form-'+id+' .gfr-success');
+  if (!submitted) saveDraft(id);
   document.getElementById('gfr-form-'+id).classList.remove('open');
 }
 
