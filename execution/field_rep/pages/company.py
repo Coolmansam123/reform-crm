@@ -6,6 +6,7 @@ from hub.shared import (
     _mobile_page,
     T_COMPANIES, T_LEADS, T_ACTIVITIES, T_GOR_BOXES, T_EVENTS,
     LOG_ACTIVITY_MODAL_HTML, LOG_ACTIVITY_MODAL_JS,
+    LEAD_MODAL_HTML, LEAD_MODAL_JS,
 )
 from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
 from hub.lead_capture_ui import LEAD_CAPTURE_HTML, build_lead_capture_js
@@ -86,6 +87,8 @@ def _mobile_company_detail_page(br: str, bt: str, company_id: int,
         '</div>'  # end mobile-body
         # Log-activity modal — shared snippet from hub.shells
         + LOG_ACTIVITY_MODAL_HTML
+        # Lead detail modal — shared snippet from hub.shells
+        + LEAD_MODAL_HTML
     )
     js = f"""
 const COMPANY_ID = {int(company_id)};
@@ -422,7 +425,7 @@ function renderLeadsTab() {{
     var line2 = '';
     if (ph) line2 += esc(ph);
     if (rs) line2 += (line2 ? ' · ' : '') + esc(rs);
-    html += '<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">';
+    html += '<div onclick="openLeadModal(' + L.id + ')" style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
     html += '<span style="font-weight:600">' + esc(nm) + '</span>';
     html += '<span style="background:' + col + '22;color:' + col + ';font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap">' + esc(st) + '</span>';
@@ -627,6 +630,8 @@ load();
         + js
         + LOG_ACTIVITY_MODAL_JS
         + "\nwindow._afterLogActivitySave = load;\n"
+        + LEAD_MODAL_JS
+        + "\nwindow._afterLeadSave = load;\n"
     )
     return _mobile_page(
         'm_directory', 'Company', body, script_js, br, bt, user=user,
