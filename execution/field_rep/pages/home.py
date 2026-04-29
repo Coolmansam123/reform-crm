@@ -31,7 +31,7 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         '<div class="label">Today’s Stops</div><div class="value" id="kpi-stops">—</div></a>'
         '<a href="/todo" class="stat-chip c-red" style="text-decoration:none">'
         '<div class="label">Overdue</div><div class="value" id="kpi-overdue">—</div></a>'
-        '<a href="/recent" class="stat-chip c-blue" style="text-decoration:none">'
+        '<a href="/lead" class="stat-chip c-blue" style="text-decoration:none">'
         '<div class="label">Leads (7d)</div><div class="value" id="kpi-leads">—</div></a>'
         '<a href="/routes" class="stat-chip c-green" style="text-decoration:none">'
         '<div class="label">Active Routes</div><div class="value" id="kpi-routes">—</div></a>'
