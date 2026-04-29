@@ -55,6 +55,10 @@ def _mobile_route_page(br: str, bt: str, user: dict = None,
         'border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;'
         'text-decoration:none;margin-left:6px">'
         '\U0001f4cb Turn-by-turn</a>'
+        '<a href="#" onclick="finishRoute();return false" '
+        'style="display:inline-block;padding:7px 12px;background:#059669;color:#fff;'
+        'border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;margin-left:6px">'
+        '✓ Finish Route</a>'
         '</div>'
         '</div>'
         # Stop bottom sheet (tap a marker)
@@ -316,6 +320,44 @@ function openDirectionsToOffice() {{
     + '&destination=' + _GOFF_LAT + ',' + _GOFF_LNG
     + '&travelmode=driving';
   window.open(url, '_blank');
+}}
+
+// Finish the active route: PATCH Status to Completed and bounce to /routes.
+// Confirmation dialog shows a quick summary so the rep can sanity-check
+// before they commit (especially useful for ending a route early when
+// Pending or In Progress stops remain).
+async function finishRoute() {{
+  if (!_routeData || !_routeData.route) return;
+  var stops = _routeData.stops || [];
+  var visited = stops.filter(function(s){{return s.status==='Visited';}}).length;
+  var skipped = stops.filter(function(s){{return s.status==='Skipped';}}).length;
+  var notReached = stops.filter(function(s){{return s.status==='Not Reached';}}).length;
+  var pending = stops.filter(function(s){{return s.status==='Pending';}}).length;
+  var inProgress = stops.filter(function(s){{return s.status==='In Progress';}}).length;
+  var lines = ['Mark this route as Completed?', ''];
+  var doneBits = [];
+  if (visited) doneBits.push(visited + ' visited');
+  if (skipped) doneBits.push(skipped + ' skipped');
+  if (notReached) doneBits.push(notReached + ' not reached');
+  lines.push(doneBits.length ? doneBits.join(' · ') : 'No stops completed yet.');
+  if (pending + inProgress > 0) {{
+    lines.push('');
+    lines.push('⚠️ ' + (pending + inProgress) + ' stop(s) still active — they will be marked unfinished.');
+  }}
+  if (!confirm(lines.join('\\n'))) return;
+  try {{
+    var r = await fetch('/api/guerilla/routes/' + _routeData.route.id + '/status', {{
+      method: 'PATCH', headers: {{'Content-Type':'application/json'}},
+      body: JSON.stringify({{status: 'Completed'}})
+    }});
+    if (r.ok) {{
+      window.location.href = '/routes';
+    }} else {{
+      alert('Could not finish route. Try again.');
+    }}
+  }} catch(e) {{
+    alert('Could not finish route. Try again.');
+  }}
 }}
 
 // Modal listing skipped / not-reached stops with their reason notes.
@@ -763,10 +805,14 @@ function renderRouteSheet(stop) {{
            + 'style="width:100%;background:#ea580c;color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">'
            + 'Next \u25b6 ' + esc(nxtName) + '</button></div>';
     }} else {{
-      // No more Pending stops \u2014 offer turn-by-turn directions back to office.
-      html += '<div style="padding:4px 0 12px"><button onclick="openDirectionsToOffice()" '
+      // No more Pending stops \u2014 offer turn-by-turn directions back to office,
+      // and a primary Finish Route action right under it (natural endpoint).
+      html += '<div style="padding:4px 0 8px"><button onclick="openDirectionsToOffice()" '
            + 'style="width:100%;background:#1e3a5f;color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">'
            + '\U0001f3e0 Back to Reform Chiropractic</button></div>';
+      html += '<div style="padding:0 0 12px"><button onclick="finishRoute()" '
+           + 'style="width:100%;background:#059669;color:#fff;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">'
+           + '\u2713 Finish Route</button></div>';
     }}
   }}
   // Action buttons by status. Pending \u2192 Arrive (one tap \u2192 In Progress, sets
