@@ -2555,6 +2555,7 @@ def web():
             bunny_zone=os.environ.get("BUNNY_STORAGE_ZONE", "techopssocialmedia"),
             bunny_key=os.environ.get("BUNNY_STORAGE_API_KEY", ""),
             bunny_cdn_base="https://techopssocialmedia.b-cdn.net",
+            bunny_prefix="CRM",
         )
 
     @fapp.post("/api/activities/transcribe")
@@ -2568,6 +2569,7 @@ def web():
             bunny_zone=os.environ.get("BUNNY_STORAGE_ZONE", "techopssocialmedia"),
             bunny_key=os.environ.get("BUNNY_STORAGE_API_KEY", ""),
             bunny_cdn_base="https://techopssocialmedia.b-cdn.net",
+            bunny_prefix="CRM",
         )
 
     @fapp.get("/api/companies/{company_id}/people")

@@ -181,6 +181,7 @@ async def create_company_activity(
 async def transcribe_activity_audio(
     request, user: dict, openai_api_key: str,
     bunny_zone: str, bunny_key: str, bunny_cdn_base: str,
+    bunny_prefix: str = "activities",
 ) -> JSONResponse:
     import httpx, secrets
     if not openai_api_key:
@@ -197,7 +198,8 @@ async def transcribe_activity_audio(
     if ext not in ("webm", "mp4", "m4a", "mp3", "wav", "ogg"):
         ext = "webm"
     key = f"{secrets.token_urlsafe(8)}.{ext}"
-    upload_url = f"https://la.storage.bunnycdn.com/{bunny_zone}/activities/audio/{key}"
+    sub = "Transcriptions" if bunny_prefix != "activities" else "audio"
+    upload_url = f"https://la.storage.bunnycdn.com/{bunny_zone}/{bunny_prefix}/{sub}/{key}"
     audio_url = ""
     async with httpx.AsyncClient(timeout=60) as client:
         ur = await client.put(
@@ -206,7 +208,7 @@ async def transcribe_activity_audio(
             headers={"AccessKey": bunny_key, "Content-Type": "application/octet-stream"},
         )
         if ur.status_code in (200, 201):
-            audio_url = f"{bunny_cdn_base}/activities/audio/{key}"
+            audio_url = f"{bunny_cdn_base}/{bunny_prefix}/{sub}/{key}"
         else:
             return JSONResponse({"error": f"bunny upload {ur.status_code}"}, status_code=502)
     # Transcribe via OpenAI Whisper. AsyncOpenAI accepts a (filename, bytes) tuple.
@@ -236,6 +238,7 @@ async def transcribe_activity_audio(
 async def upload_activity_photo(
     request, br: str, bt: str, user: dict, company_id: int,
     bunny_zone: str, bunny_key: str, bunny_cdn_base: str,
+    bunny_prefix: str = "activities",
 ) -> JSONResponse:
     import httpx, secrets
     form = await request.form()
@@ -250,7 +253,13 @@ async def upload_activity_photo(
     if ext not in ("jpg", "jpeg", "png", "webp", "heic"):
         ext = "jpg"
     key = f"{secrets.token_urlsafe(8)}.{ext}"
-    upload_url = f"https://la.storage.bunnycdn.com/{bunny_zone}/activities/{company_id}/{key}"
+    # Legacy "activities" prefix kept the per-company subfolder; new
+    # "Routes"/"CRM" prefixes are flat under Photos/.
+    if bunny_prefix == "activities":
+        path = f"activities/{company_id}/{key}"
+    else:
+        path = f"{bunny_prefix}/Photos/{key}"
+    upload_url = f"https://la.storage.bunnycdn.com/{bunny_zone}/{path}"
     async with httpx.AsyncClient(timeout=60) as client:
         ur = await client.put(
             upload_url,
@@ -259,7 +268,7 @@ async def upload_activity_photo(
         )
     if ur.status_code not in (200, 201):
         return JSONResponse({"error": f"bunny upload {ur.status_code}"}, status_code=502)
-    return JSONResponse({"url": f"{bunny_cdn_base}/activities/{company_id}/{key}"})
+    return JSONResponse({"url": f"{bunny_cdn_base}/{path}"})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

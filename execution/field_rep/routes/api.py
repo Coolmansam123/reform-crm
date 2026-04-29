@@ -213,6 +213,7 @@ async def upload_activity_photo(company_id: int, request: Request):
     return await outreach_api.upload_activity_photo(
         request, br, bt, session, company_id,
         bunny_zone=bzone, bunny_key=bkey, bunny_cdn_base=bcdn,
+        bunny_prefix="Routes",
     )
 
 
@@ -236,6 +237,7 @@ async def upload_generic_activity_photo(request: Request):
     return await outreach_api.upload_activity_photo(
         request, br, bt, session, venue_id,
         bunny_zone=bzone, bunny_key=bkey, bunny_cdn_base=bcdn,
+        bunny_prefix="Routes",
     )
 
 
@@ -250,6 +252,7 @@ async def transcribe_activity_audio(request: Request):
         request, session,
         openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
         bunny_zone=bzone, bunny_key=bkey, bunny_cdn_base=bcdn,
+        bunny_prefix="Routes",
     )
 
 
