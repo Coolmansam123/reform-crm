@@ -944,6 +944,10 @@ function _gfrSuccess(fid,actId){
   // it can flip the stop status to Visited (matches the bol form behavior at
   // the bottom of _GFR_JS).
   if (typeof _onFormSubmitSuccess === 'function') _onFormSubmitSuccess();
+  // Notify any host page (e.g. company profile) that data has changed so it
+  // can re-render its leads / events / boxes lists + KPI strip without a
+  // manual refresh.
+  if (typeof window._afterCompanyDataChange === 'function') window._afterCompanyDataChange();
 }
 async function _gfrDoSubmit(fid,ftype,fields,btn){
   try{

@@ -219,6 +219,7 @@ def build_lead_capture_js(
         "      st.style.color = '#059669';\n"
         "      st.textContent = '✓ Lead captured!';\n"
         "      setTimeout(closeLeadCapture, 1100);\n"
+        "      if (typeof window._afterCompanyDataChange === 'function') window._afterCompanyDataChange();\n"
         "    } else {\n"
         "      st.style.color = '#ef4444';\n"
         "      st.textContent = 'Failed: ' + (d.error || 'unknown');\n"

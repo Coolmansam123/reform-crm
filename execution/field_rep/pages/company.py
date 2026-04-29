@@ -4,7 +4,7 @@ import os
 
 from hub.shared import (
     _mobile_page,
-    T_COMPANIES, T_LEADS, T_ACTIVITIES, T_GOR_BOXES,
+    T_COMPANIES, T_LEADS, T_ACTIVITIES, T_GOR_BOXES, T_EVENTS,
     LOG_ACTIVITY_MODAL_HTML, LOG_ACTIVITY_MODAL_JS,
 )
 from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
@@ -92,11 +92,13 @@ const COMPANY_ID = {int(company_id)};
 const CGK = {repr(gk)};
 const T_LEADS_TID = {int(T_LEADS)};
 const T_GOR_BOXES_TID = {int(T_GOR_BOXES)};
+const T_EVENTS_TID = {int(T_EVENTS)};
 
 let _COMPANY = null;
 let _ACTS = [];
 let _LEADS_ALL = [];
 let _BOXES_ALL = [];
+let _EVENTS_ALL = [];
 let _cMap = null;
 let _cMarker = null;
 
@@ -207,7 +209,19 @@ function renderStats() {{
     var src = (L.Source || '').trim().toLowerCase();
     return src && src === nameKey;
   }}).length;
-  var eventsCt = (_ACTS || []).filter(function(a) {{ return !!svJS(a['Event Status']); }}).length;
+  // Count events from T_EVENTS filtered by venue id (matches renderEventsTab).
+  var eventsCt = 0;
+  if (legacyId != null) {{
+    var legacyNum = parseInt(legacyId);
+    eventsCt = (_EVENTS_ALL || []).filter(function(e) {{
+      var biz = e['Business'] || [];
+      if (!Array.isArray(biz)) return false;
+      return biz.some(function(x) {{
+        var vid = (x && (x.id != null ? x.id : x));
+        return vid === legacyNum || String(vid) === String(legacyId);
+      }});
+    }}).length;
+  }}
   var boxesCt = 0;
   if (legacyId) {{
     boxesCt = _BOXES_ALL.filter(function(b) {{
@@ -441,8 +455,27 @@ function scheduleCompanyEvent(formType) {{
 }}
 
 function renderEventsTab() {{
-  var events = (_ACTS || []).filter(function(a) {{ return !!svJS(a['Event Status']); }})
-                            .sort(function(a,b) {{ return (b.Created||'').localeCompare(a.Created||''); }});
+  // T_EVENTS rows have Business: link_row → T_GOR_VENUES. For guerilla
+  // companies, _COMPANY['Legacy ID'] is the venue id; non-guerilla companies
+  // don't have venues yet so the filter just returns empty.
+  var legacyId = (_COMPANY && _COMPANY['Legacy ID']) || null;
+  var events = [];
+  if (legacyId != null) {{
+    var legacyNum = parseInt(legacyId);
+    events = (_EVENTS_ALL || []).filter(function(e) {{
+      var biz = e['Business'] || [];
+      if (!Array.isArray(biz)) return false;
+      return biz.some(function(x) {{
+        var vid = (x && (x.id != null ? x.id : x));
+        return vid === legacyNum || String(vid) === String(legacyId);
+      }});
+    }});
+    events.sort(function(a, b) {{
+      var da = a['Event Date'] || (a['Created']||'').slice(0,10);
+      var db = b['Event Date'] || (b['Created']||'').slice(0,10);
+      return (db||'').localeCompare(da||'');
+    }});
+  }}
   var el = document.getElementById('cd-events');
   if (!events.length) {{
     el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No events scheduled at this business yet.</div>';
@@ -450,10 +483,10 @@ function renderEventsTab() {{
   }}
   var evColors = {{'Prospective':'#3b82f6','Approved':'#10b981','Scheduled':'#8b5cf6','Completed':'#64748b'}};
   var html = '';
-  events.forEach(function(a) {{
-    var nm = a.Summary || svJS(a.Type) || 'Event';
-    var st = svJS(a['Event Status']) || '';
-    var dt = a.Date || (a.Created || '').slice(0,10);
+  events.forEach(function(e) {{
+    var nm = e['Name'] || svJS(e['Event Type']) || 'Event';
+    var st = svJS(e['Event Status']) || '';
+    var dt = e['Event Date'] || (e['Created'] || '').slice(0,10);
     var col = evColors[st] || '#6b7280';
     html += '<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">';
@@ -531,10 +564,8 @@ async function placeCompanyBox(venueId) {{
       st.style.color = '#059669'; st.textContent = 'Box placed ✓';
       document.getElementById('cd-box-loc').value = '';
       document.getElementById('cd-box-contact').value = '';
-      // Refresh underlying list so the new row shows up
-      _BOXES_ALL = await fetchAllTid(T_GOR_BOXES_TID);
-      renderStats();
-      renderBoxesTab();
+      // Refresh leads / events / boxes / KPI strip via the shared hook.
+      if (typeof window._afterCompanyDataChange === 'function') window._afterCompanyDataChange();
     }} else {{
       st.style.color = '#ef4444'; st.textContent = 'Error: ' + (d.error || 'failed');
     }}
@@ -545,11 +576,12 @@ async function placeCompanyBox(venueId) {{
 
 // ── Load orchestrator ────────────────────────────────────────────────────
 async function load() {{
-  var [cRes, aRes, leads, boxes] = await Promise.all([
+  var [cRes, aRes, leads, boxes, events] = await Promise.all([
     fetch('/api/companies/' + COMPANY_ID),
     fetch('/api/companies/' + COMPANY_ID + '/activities'),
     fetchAllTid(T_LEADS_TID),
     fetchAllTid(T_GOR_BOXES_TID),
+    fetchAllTid(T_EVENTS_TID),
   ]);
   if (!cRes.ok) {{
     document.getElementById('cd-name').textContent = 'Not found';
@@ -562,6 +594,7 @@ async function load() {{
   _ACTS = aRes.ok ? await aRes.json() : [];
   _LEADS_ALL = leads || [];
   _BOXES_ALL = boxes || [];
+  _EVENTS_ALL = events || [];
   renderHeader();
   renderTabs();
   renderStats();
@@ -579,6 +612,12 @@ function openPhotoLightbox(url) {{
   bg.innerHTML = '<img src="' + url + '" style="max-width:100%;max-height:100%;object-fit:contain">';
   document.body.appendChild(bg);
 }}
+
+// Universal hook: any create from a sub-form (lead capture overlay, GFR
+// event forms, box placement) calls this to re-fetch + re-render leads /
+// events / boxes / KPI strip. Falls back to an inline reload no-op when
+// load() isn't yet defined.
+window._afterCompanyDataChange = load;
 
 load();
 """
