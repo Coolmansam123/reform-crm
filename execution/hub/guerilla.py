@@ -1170,7 +1170,7 @@ async function toggleS2VoiceNote(){
         if (_s2VoiceTranscript) {
           var ta = document.getElementById('s2-int-summary');
           if (ta.value.trim()) {
-            ta.value = ta.value.trimEnd() + '\n\n' + _s2VoiceTranscript;
+            ta.value = ta.value.trimEnd() + '\\n\\n' + _s2VoiceTranscript;
           } else {
             ta.value = _s2VoiceTranscript;
           }
