@@ -10,7 +10,7 @@ from typing import Awaitable, Callable
 
 from fastapi.responses import JSONResponse
 
-from .constants import T_COMPANIES, T_ACTIVITIES
+from .constants import T_COMPANIES, T_ACTIVITIES, T_GOR_ROUTE_STOPS
 
 CachedRowsFn = Callable[[int], Awaitable[list]]
 
@@ -275,7 +275,10 @@ async def get_outreach_due(
     by how overdue. Shape: lightweight list tailored for a mobile dashboard.
 
     Each row: {id, name, category, phone, address, latitude, longitude,
-               status, follow_up_date, days_overdue}
+               status, follow_up_date, days_overdue, venue_id}
+    `venue_id` is populated only for guerilla-category companies whose
+    `Legacy Source == 'guerilla_venue'`; the To Do page uses it to enable
+    the "+ Add to route" button (route stops link to T_GOR_VENUES).
     """
     if not T_COMPANIES:
         return JSONResponse([])
@@ -295,6 +298,10 @@ async def get_outreach_due(
             days = (_date.today() - _d(int(y), int(m), int(d))).days
         except Exception:
             days = 0
+        venue_id = None
+        if _sv(c.get("Legacy Source")) == "guerilla_venue":
+            try: venue_id = int(c.get("Legacy ID"))
+            except (TypeError, ValueError): venue_id = None
         out.append({
             "id":              c.get("id"),
             "name":            (c.get("Name") or "").strip() or "(unnamed)",
@@ -306,6 +313,92 @@ async def get_outreach_due(
             "status":          _sv(c.get("Contact Status")),
             "follow_up_date":  fu,
             "days_overdue":    days,
+            "venue_id":        venue_id,
         })
     out.sort(key=lambda r: r["days_overdue"], reverse=True)
+    return JSONResponse(out[:limit])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/outreach/skipped — recent route stops the rep skipped or didn't reach
+# ─────────────────────────────────────────────────────────────────────────────
+async def get_skipped_stops(
+    br: str, bt: str, user: dict,
+    cached_rows: CachedRowsFn,
+    *,
+    window_days: int = 30,
+    limit: int = 200,
+) -> JSONResponse:
+    """Return recent T_GOR_ROUTE_STOPS rows where Status is Skipped or
+    Not Reached, deduped by venue (latest skip wins). Used by the To Do
+    page so reps can re-queue abandoned venues onto a fresh route.
+
+    Each row: {venue_id, venue_name, company_id, status, reason,
+               completed_at, days_ago}
+    """
+    if not T_GOR_ROUTE_STOPS:
+        return JSONResponse([])
+    stops = await cached_rows(T_GOR_ROUTE_STOPS) or []
+    today = _date.today()
+    cutoff_ord = today.toordinal() - window_days
+
+    from datetime import date as _d
+    by_venue: dict[int, dict] = {}
+    for s in stops:
+        status = _sv(s.get("Status"))
+        if status not in ("Skipped", "Not Reached"):
+            continue
+        completed = (s.get("Completed At") or "").strip()
+        if not completed:
+            continue
+        try:
+            y, m, dd = completed[:10].split("-")
+            stop_date = _d(int(y), int(m), int(dd))
+        except Exception:
+            continue
+        if stop_date.toordinal() < cutoff_ord:
+            continue
+        venue_link = s.get("Venue") or []
+        venue_id = None
+        venue_name = ""
+        if isinstance(venue_link, list) and venue_link:
+            v0 = venue_link[0]
+            if isinstance(v0, dict):
+                venue_id = v0.get("id")
+                venue_name = v0.get("value") or v0.get("name") or ""
+            else:
+                venue_id = v0
+        if venue_id is None:
+            continue
+        try: venue_id = int(venue_id)
+        except (TypeError, ValueError): continue
+        if not venue_name:
+            venue_name = (s.get("Name") or "").strip() or f"Venue {venue_id}"
+        existing = by_venue.get(venue_id)
+        if existing and existing["completed_at"] >= completed:
+            continue
+        by_venue[venue_id] = {
+            "venue_id":     venue_id,
+            "venue_name":   venue_name,
+            "company_id":   None,  # filled below
+            "status":       status,
+            "reason":       (s.get("Notes") or "").strip(),
+            "completed_at": completed,
+            "days_ago":     (today - stop_date).days,
+        }
+
+    if by_venue and T_COMPANIES:
+        companies = await cached_rows(T_COMPANIES) or []
+        venue_to_co: dict[int, int] = {}
+        for c in companies:
+            if _sv(c.get("Legacy Source")) != "guerilla_venue":
+                continue
+            lid = c.get("Legacy ID")
+            try: venue_to_co[int(lid)] = c.get("id")
+            except (TypeError, ValueError): pass
+        for vid, row in by_venue.items():
+            row["company_id"] = venue_to_co.get(vid)
+
+    out = list(by_venue.values())
+    out.sort(key=lambda r: r["completed_at"], reverse=True)
     return JSONResponse(out[:limit])

@@ -8,37 +8,51 @@ from hub.shared import (
 
 
 def _mobile_outreach_due_page(br: str, bt: str, user: dict = None) -> str:
-    """Cross-category list of companies with past-due Follow-Up Dates.
-    Fetches `/api/outreach/due` (server-filtered). Each row shows name,
-    category pill, phone (tel:), days overdue. Tap a row → Company detail
-    page (shipped in a later iteration)."""
+    """To Do dashboard — combines two action-required lists for a rep:
+
+    1. Overdue Follow-Ups: companies past their `Follow-Up Date`
+       (`/api/outreach/due`).
+    2. Skipped / Not Reached: route stops the rep didn't get to in the
+       last 30 days (`/api/outreach/skipped`).
+
+    Each row shows a `+ Add to route` button when the rep has an active
+    guerilla route assigned today AND the row resolves to a venue id —
+    posts to `POST /api/guerilla/routes/{route_id}/stops` (same path the
+    home-page Boxes Due panel uses)."""
     user = user or {}
     body = (
         '<div class="mobile-hdr">'
-        '<div><div class="mobile-hdr-title">Outreach Due</div>'
-        '<div class="mobile-hdr-sub">Companies past their follow-up date</div></div>'
+        '<div><div class="mobile-hdr-title">To Do</div>'
+        '<div class="mobile-hdr-sub">Follow-ups due + stops you skipped</div></div>'
         '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         '</div>'
         '<div class="mobile-body">'
         '<div class="stats-row" style="margin-bottom:14px">'
-        '<div class="stat-chip c-red"><div class="label">Total Overdue</div><div class="value" id="od-kpi-total">—</div></div>'
-        '<div class="stat-chip c-orange"><div class="label">14+ Days</div><div class="value" id="od-kpi-bad">—</div></div>'
-        '<div class="stat-chip c-yellow"><div class="label">Worst</div><div class="value" id="od-kpi-worst">—</div></div>'
+        '<div class="stat-chip c-red"><div class="label">Total</div><div class="value" id="td-kpi-total">—</div></div>'
+        '<div class="stat-chip c-orange"><div class="label">Skipped</div><div class="value" id="td-kpi-skipped">—</div></div>'
+        '<div class="stat-chip c-yellow"><div class="label">Worst</div><div class="value" id="td-kpi-worst">—</div></div>'
         '</div>'
-        '<div id="od-filter" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap"></div>'
-        '<div id="od-summary" style="font-size:12px;color:var(--text3);margin-bottom:10px">Loading…</div>'
-        '<div id="od-list"><div class="loading">Loading…</div></div>'
+        '<div id="td-route-banner" style="display:none;margin-bottom:12px;padding:8px 12px;border-radius:8px;'
+        'font-size:12px;font-weight:600"></div>'
+        '<div class="mobile-section-lbl" id="td-fu-hdr" style="margin:8px 0 6px">Overdue Follow-Ups</div>'
+        '<div id="td-filter" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap"></div>'
+        '<div id="td-fu-list" style="margin-bottom:18px"><div class="loading">Loading…</div></div>'
+        '<div class="mobile-section-lbl" id="td-sk-hdr" style="margin:8px 0 6px">Skipped Stops</div>'
+        '<div id="td-sk-list"><div class="loading">Loading…</div></div>'
         '</div>'
     )
     js = """
-var _OD_ROWS = [];
-var _OD_FILTER = 'all';  // 'all' | 'attorney' | 'guerilla' | 'community' | 'other'
+var _OD_ROWS = [];           // overdue follow-ups
+var _SK_ROWS = [];           // skipped/not-reached stops
+var _OD_FILTER = 'all';      // category filter on follow-ups only
+var _ACTIVE_ROUTE_ID = null; // populated from /api/guerilla/routes/today
+var _ADDED_VENUES = {};      // venueId -> true once a stop has been queued
 
 var CAT_META = {
-  attorney:  {label: 'Attorney',  color: '#7c3aed', icon: '⚖'},
-  guerilla:  {label: 'Guerilla',  color: '#ea580c', icon: '\U0001f3cb'},
-  community: {label: 'Community', color: '#059669', icon: '\U0001f91d'},
-  other:     {label: 'Other',     color: '#64748b', icon: '\U0001f4cd'},
+  attorney:  {label: 'Attorney',  color: '#7c3aed'},
+  guerilla:  {label: 'Guerilla',  color: '#ea580c'},
+  community: {label: 'Community', color: '#059669'},
+  other:     {label: 'Other',     color: '#64748b'},
 };
 
 function esc(s) {
@@ -74,28 +88,87 @@ function renderFilter() {
       'color:' + (active ? '#fff' : 'var(--text2)') + '">' +
       esc(meta.label) + ' ' + counts[k] + '</button>';
   });
-  document.getElementById('od-filter').innerHTML = html;
+  document.getElementById('td-filter').innerHTML = html;
 }
 
 function setFilter(k) {
   _OD_FILTER = k;
   renderFilter();
-  renderList();
+  renderOD();
 }
 
-function renderList() {
+// Build the right-hand action button for a row: Add-to-route when we have
+// both an active route and a venue id; otherwise an inline status hint.
+function _actionBtn(venueId) {
+  if (!venueId) {
+    return '<span style="font-size:10px;color:var(--text4)">no venue</span>';
+  }
+  if (!_ACTIVE_ROUTE_ID) {
+    return '<span style="font-size:10px;color:var(--text4)">no active route</span>';
+  }
+  if (_ADDED_VENUES[venueId]) {
+    return '<button disabled style="background:#059669;color:#fff;border:none;border-radius:6px;' +
+           'padding:7px 11px;font-size:12px;font-weight:600;min-height:34px;white-space:nowrap;opacity:.85">' +
+           '\\u2713 Added</button>';
+  }
+  return '<button onclick="event.stopPropagation();addToRoute(' + venueId + ',this)" ' +
+         'style="background:#ea580c;color:#fff;border:none;border-radius:6px;padding:7px 11px;' +
+         'font-size:12px;font-weight:600;cursor:pointer;min-height:34px;white-space:nowrap">' +
+         '+ Add to route</button>';
+}
+
+async function addToRoute(venueId, btn) {
+  if (!_ACTIVE_ROUTE_ID || !venueId) return;
+  // Look up the row so we can build a sensible stop label without piping
+  // free-text through the inline onclick attribute.
+  var row = null;
+  for (var i = 0; i < _OD_ROWS.length; i++) {
+    if (_OD_ROWS[i].venue_id === venueId) { row = _OD_ROWS[i]; break; }
+  }
+  if (!row) {
+    for (var j = 0; j < _SK_ROWS.length; j++) {
+      if (_SK_ROWS[j].venue_id === venueId) { row = _SK_ROWS[j]; break; }
+    }
+  }
+  var label;
+  if (row && row.name)         label = 'Follow-up: ' + row.name;
+  else if (row && row.venue_name) label = 'Re-visit: ' + row.venue_name;
+  else                            label = 'Venue ' + venueId;
+
+  if (btn) { btn.disabled = true; btn.textContent = '\\u2026'; }
+  try {
+    var r = await fetch('/api/guerilla/routes/' + _ACTIVE_ROUTE_ID + '/stops', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({venue_id: venueId, name: label})
+    });
+    if (!r.ok) {
+      var err = await r.json().catch(function() { return {}; });
+      if (btn) { btn.disabled = false; btn.textContent = '+ Add to route'; }
+      alert('Could not add: ' + (err.error || r.status));
+      return;
+    }
+    _ADDED_VENUES[venueId] = true;
+    renderOD();
+    renderSK();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '+ Add to route'; }
+    alert('Network error \\u2014 try again');
+  }
+}
+
+function renderOD() {
   var list = _OD_FILTER === 'all'
     ? _OD_ROWS
     : _OD_ROWS.filter(function(r) { return (r.category || 'other') === _OD_FILTER; });
 
-  document.getElementById('od-summary').textContent =
-    list.length === 0 ? 'No overdue follow-ups in this filter.' :
-    (list.length + ' compan' + (list.length === 1 ? 'y' : 'ies') + ' overdue');
+  var hdr = document.getElementById('td-fu-hdr');
+  if (hdr) hdr.textContent = 'Overdue Follow-Ups (' + list.length + ')';
 
   if (!list.length) {
-    document.getElementById('od-list').innerHTML =
-      '<div style="text-align:center;padding:40px 16px;color:var(--text3);font-size:13px">' +
-      '\U0001f389 No overdue follow-ups.</div>';
+    document.getElementById('td-fu-list').innerHTML =
+      '<div style="text-align:center;padding:20px 16px;color:var(--text3);font-size:12px">' +
+      'No overdue follow-ups in this filter.</div>';
     return;
   }
 
@@ -120,46 +193,112 @@ function renderList() {
       '</div>' +
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">' +
       '<span style="font-size:11px;font-weight:600;color:' + color + '">' + esc(label) + '</span>' +
-      (r.phone
-        ? '<a href="tel:' + esc(r.phone) + '" onclick="event.stopPropagation()" style="font-size:12px;color:#3b82f6;font-weight:600;text-decoration:none">' +
-          '\U0001f4de ' + esc(r.phone) + '</a>'
-        : '<span style="font-size:11px;color:var(--text3)">no phone</span>') +
+      _actionBtn(r.venue_id) +
       '</div>' +
       '</div>';
   });
-  document.getElementById('od-list').innerHTML = html;
+  document.getElementById('td-fu-list').innerHTML = html;
 }
 
-async function loadOD() {
-  try {
-    var r = await fetch('/api/outreach/due');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    _OD_ROWS = await r.json();
-    // Active Partners have graduated out of the rep's outreach pipeline.
-    _OD_ROWS = (_OD_ROWS || []).filter(function(row) {
-      return row.status !== 'Active Partner';
-    });
-  } catch (e) {
-    document.getElementById('od-summary').textContent = '';
-    document.getElementById('od-list').innerHTML =
-      '<div style="text-align:center;padding:40px 16px;color:#ef4444;font-size:13px">' +
-      'Failed to load: ' + esc(e.message || 'unknown') + '</div>';
+function renderSK() {
+  var hdr = document.getElementById('td-sk-hdr');
+  if (hdr) hdr.textContent = 'Skipped Stops (' + _SK_ROWS.length + ')';
+
+  if (!_SK_ROWS.length) {
+    document.getElementById('td-sk-list').innerHTML =
+      '<div style="text-align:center;padding:20px 16px;color:var(--text3);font-size:12px">' +
+      'No skipped stops in the last 30 days.</div>';
     return;
   }
-  renderFilter();
-  renderList();
-  // KPI strip
-  var total = _OD_ROWS.length;
-  var bad14 = _OD_ROWS.filter(function(r) { return (r.days_overdue || 0) >= 14; }).length;
-  var worst = _OD_ROWS.reduce(function(m, r) { return Math.max(m, r.days_overdue || 0); }, 0);
-  document.getElementById('od-kpi-total').textContent = total;
-  document.getElementById('od-kpi-bad').textContent = bad14;
-  document.getElementById('od-kpi-worst').textContent = worst ? (worst + 'd') : '—';
+
+  var html = '';
+  _SK_ROWS.forEach(function(r) {
+    var statusColor = r.status === 'Skipped' ? '#f97316' : '#ef4444';
+    var ago = r.days_ago === 0 ? 'today' :
+              r.days_ago === 1 ? '1d ago' :
+              r.days_ago + 'd ago';
+    var click = r.company_id
+      ? 'onclick="location.href=\\'/company/' + r.company_id + '\\'" '
+      : '';
+    var cursor = r.company_id ? 'cursor:pointer' : '';
+    html +=
+      '<div ' + click +
+      'style="background:var(--card);border:1px solid var(--border);border-left:3px solid ' + statusColor +
+      ';border-radius:10px;padding:12px 14px;margin-bottom:8px;' + cursor + '">' +
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">' +
+      '<div style="flex:1;min-width:0">' +
+      '<div style="font-size:14px;font-weight:700;color:var(--text);word-break:break-word">' + esc(r.venue_name) + '</div>' +
+      (r.reason ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic">\\u201c' + esc(r.reason) + '\\u201d</div>' : '') +
+      '</div>' +
+      '<span style="background:' + statusColor + '22;color:' + statusColor + ';font-size:10px;' +
+      'font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap">' + esc(r.status) + '</span>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">' +
+      '<span style="font-size:11px;color:var(--text3)">skipped ' + esc(ago) + '</span>' +
+      _actionBtn(r.venue_id) +
+      '</div>' +
+      '</div>';
+  });
+  document.getElementById('td-sk-list').innerHTML = html;
 }
 
-loadOD();
+function renderKPIs() {
+  var total = _OD_ROWS.length + _SK_ROWS.length;
+  var skipped = _SK_ROWS.length;
+  var worst = _OD_ROWS.reduce(function(m, r) { return Math.max(m, r.days_overdue || 0); }, 0);
+  document.getElementById('td-kpi-total').textContent = total;
+  document.getElementById('td-kpi-skipped').textContent = skipped;
+  document.getElementById('td-kpi-worst').textContent = worst ? (worst + 'd') : '\\u2014';
+}
+
+function renderRouteBanner() {
+  var el = document.getElementById('td-route-banner');
+  if (!el) return;
+  el.style.display = 'block';
+  if (_ACTIVE_ROUTE_ID) {
+    el.style.background = '#05966915';
+    el.style.border = '1px solid #05966950';
+    el.style.color = '#059669';
+    el.textContent = '\\u2713 Active route detected \\u2014 tap "+ Add to route" to queue stops';
+  } else {
+    el.style.background = '#64748b15';
+    el.style.border = '1px solid #64748b50';
+    el.style.color = 'var(--text3)';
+    el.textContent = 'No active route today \\u2014 tap a row to open the company';
+  }
+}
+
+async function loadAll() {
+  try {
+    var [duResp, skResp, rtResp] = await Promise.all([
+      fetch('/api/outreach/due'),
+      fetch('/api/outreach/skipped'),
+      fetch('/api/guerilla/routes/today'),
+    ]);
+    _OD_ROWS = duResp.ok ? (await duResp.json()) : [];
+    _OD_ROWS = (_OD_ROWS || []).filter(function(row) { return row.status !== 'Active Partner'; });
+    _SK_ROWS = skResp.ok ? (await skResp.json()) : [];
+    if (rtResp.ok) {
+      var rt = await rtResp.json();
+      _ACTIVE_ROUTE_ID = (rt && rt.route && rt.route.id) || null;
+    }
+  } catch (e) {
+    document.getElementById('td-fu-list').innerHTML =
+      '<div style="text-align:center;padding:30px 16px;color:#ef4444;font-size:13px">' +
+      'Failed to load: ' + esc(e.message || 'unknown') + '</div>';
+    document.getElementById('td-sk-list').innerHTML = '';
+    return;
+  }
+  renderRouteBanner();
+  renderFilter();
+  renderOD();
+  renderSK();
+  renderKPIs();
+}
+
+loadAll();
 """
-    return _mobile_page('m_outreach', 'Outreach Due', body, js, br, bt, user=user)
+    return _mobile_page('m_outreach', 'To Do', body, js, br, bt, user=user)
 
 
 

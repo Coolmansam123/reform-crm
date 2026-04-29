@@ -153,6 +153,17 @@ async def outreach_due(request: Request):
     return await outreach_api.get_outreach_due(br, bt, session, _cached_rows)
 
 
+# ─── Outreach: recent skipped / not-reached route stops ─────────────────────
+@router.get("/api/outreach/skipped")
+async def outreach_skipped(request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    from hub import outreach_api
+    br, bt = _env()
+    return await outreach_api.get_skipped_stops(br, bt, session, _cached_rows)
+
+
 # ─── Companies: read + activity log (mobile detail page uses these) ─────────
 async def _invalidate_async(*tids: int) -> None:
     await _invalidate(*tids)

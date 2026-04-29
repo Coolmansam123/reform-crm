@@ -91,12 +91,18 @@ async def recent(request: Request):
     return HTMLResponse(_mobile_recent_page(br, bt, user=user))
 
 
-@router.get("/outreach", response_class=HTMLResponse)
-async def outreach_due_page(request: Request):
+@router.get("/todo", response_class=HTMLResponse)
+async def todo_page(request: Request):
     user, br, bt = await _guard(request)
     if not user:
         return RedirectResponse(url="/login")
     return HTMLResponse(_mobile_outreach_due_page(br, bt, user=user))
+
+
+# Legacy redirect — any cached PWA / bookmark hitting /outreach lands on /todo.
+@router.get("/outreach")
+async def outreach_legacy_redirect():
+    return RedirectResponse(url="/todo", status_code=302)
 
 
 @router.get("/outreach/map", response_class=HTMLResponse)

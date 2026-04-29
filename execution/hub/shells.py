@@ -106,8 +106,8 @@ def _build_mobile_drawer(active: str, user: dict) -> str:
     items = (
         link('m_home',         '🏠 Dashboard',         '/',              grp=True)
         + link('m_routes',     '🗺️ Routes',       '/routes',        grp=True)
-        + link('m_outreach',   '📞 Outreach Due',       '/outreach',      grp=True)
-        + link('m_lead',       '📋 Capture Lead',       '/lead',          grp=True)
+        + link('m_outreach',   '📋 To Do',              '/todo',          grp=True)
+        + link('m_lead',       '📋 Leads',              '/lead',          grp=True)
         + link('m_directory',  '📇 All Companies',      '/directory',     grp=True)
         + (link('m_recent',    '⏱️ Recent Activity',  '/recent',        grp=True) if admin else '')
         + sep
