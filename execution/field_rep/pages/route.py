@@ -391,12 +391,14 @@ function renderRouteStops() {{
   // since it's stops[0]. Only seed with the office when there's no anchor.
   if (!anchorStop) {{ pathCoords.push(officePos); }}
 
+  var stopsDrawn = 0;
   stops.forEach(function(stop, i) {{
     var lat = parseFloat(stop.lat), lng = parseFloat(stop.lng);
     if (!lat || !lng) return;
     var pos = {{lat:lat, lng:lng}};
     pathCoords.push(pos);
     bounds.extend(pos);
+    stopsDrawn++;
     var color = _STATUS_COLORS[stop.status] || '#4285f4';
     var marker = new google.maps.Marker({{
       position: pos, map: _rMap,
@@ -407,8 +409,11 @@ function renderRouteStops() {{
     (function(s) {{ marker.addListener('click', function() {{ openRouteSheet(s); }}); }})(stop);
     _rMarkers[stop.stop_id] = marker;
   }});
-  // Close the loop: return to office at the end of the active stops.
-  if (pathCoords.length > 1) {{
+  // Close the loop: return to office at the end of the active stops. Always
+  // draws when at least one stop pin exists (so the rep can see the path
+  // back to office even when only the anchor remains and there are no
+  // pending stops left).
+  if (stopsDrawn >= 1) {{
     pathCoords.push(officePos);
     _drawDirectionsOrFallback(pathCoords);
   }}
