@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from hub.access import _is_admin
 from field_rep.pages import (
+    _mobile_admin_page,
     _mobile_company_detail_page,
     _mobile_directory_page,
     _mobile_events_page,
@@ -20,7 +21,6 @@ from field_rep.pages import (
     _mobile_map_page,
     _mobile_outreach_due_page,
     _mobile_outreach_map_page,
-    _mobile_recent_page,
     _mobile_route_page,
     _mobile_routes_dashboard_page,
 )
@@ -92,14 +92,22 @@ async def events_page(request: Request):
     return HTMLResponse(_mobile_events_page(br, bt, user=user))
 
 
-@router.get("/recent", response_class=HTMLResponse)
-async def recent(request: Request):
+@router.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    """Admin landing — Routes management + Recent Activity feed in tabs.
+    Non-admins are bounced home."""
     user, br, bt = await _guard(request)
     if not user:
         return RedirectResponse(url="/login")
     if not _is_admin(user):
         return RedirectResponse(url="/")
-    return HTMLResponse(_mobile_recent_page(br, bt, user=user))
+    return HTMLResponse(_mobile_admin_page(br, bt, user=user))
+
+
+@router.get("/recent")
+async def recent_legacy_redirect(request: Request):
+    """Legacy redirect — Recent Activity moved to the Activity tab on /admin."""
+    return RedirectResponse(url="/admin#activity", status_code=302)
 
 
 @router.get("/todo", response_class=HTMLResponse)

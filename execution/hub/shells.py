@@ -110,7 +110,7 @@ def _build_mobile_drawer(active: str, user: dict) -> str:
         + link('m_lead',       '🎯 Leads',              '/lead',          grp=True)
         + link('m_events',     '📅 Events',             '/events',        grp=True)
         + link('m_directory',  '📇 All Companies',      '/directory',     grp=True)
-        + (link('m_recent',    '⏱️ Recent Activity',  '/recent',        grp=True) if admin else '')
+        + (link('m_admin',     '🛠️ Admin',             '/admin',         grp=True) if admin else '')
         + sep
         + '<a href="#" onclick="enableNotifications();return false;">🔔 Enable Notifications</a>'
         + '<a href="https://hub.reformchiropractic.app">💻 Full Hub</a>'
