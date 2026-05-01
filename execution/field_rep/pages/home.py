@@ -16,12 +16,12 @@ _HOME_CSS = """
 #home-root[data-state="B"] .only-c { display:none }
 #home-root[data-state="C"] .only-a,
 #home-root[data-state="C"] .only-b { display:none }
-.qlog-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:18px }
+.qlog-row { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:18px }
 .qlog-btn { background:var(--card); border:1px solid var(--border); border-radius:10px;
-            padding:12px 6px; font-size:12px; font-weight:600; color:var(--text);
+            padding:10px 4px; font-size:11px; font-weight:600; color:var(--text);
             text-align:center; cursor:pointer; text-decoration:none;
-            display:flex; flex-direction:column; align-items:center; gap:4px;
-            font-family:inherit; min-height:64px; line-height:1.2 }
+            display:flex; flex-direction:column; align-items:center; gap:3px;
+            font-family:inherit; min-height:62px; line-height:1.2 }
 .qlog-btn:active { background:rgba(0,74,198,.08) }
 .qlog-btn .material-symbols-outlined { font-size:22px; color:#004ac6 }
 .qlog-btn[data-active="1"] { background:#004ac6; border-color:#004ac6; color:#fff }
@@ -369,8 +369,11 @@ function quickLog(kind) {
     } else if (state === 'B') {
       window.location.href = '/route';
     } else {
-      // State A: ad-hoc Business Outreach Log
-      if (typeof openGFRForm === 'function') openGFRForm('Business Outreach Log');
+      // State A: open the GFR chooser so the rep picks the right form —
+      // each event type (External Event, Lunch and Learn, Health Assessment
+      // Screening, Mobile Massage Service, Business Outreach Log) has its
+      // own purpose-specific fields and shouldn't be collapsed into one.
+      if (typeof openGFRChooser === 'function') openGFRChooser();
       else window.location.href = '/companies';
     }
     return;
