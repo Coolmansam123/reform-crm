@@ -8,6 +8,7 @@ from hub.shared import (
     T_COMPANIES,
 )
 from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
+from hub.maps import MAP_PALETTE_JS, OFFICE_PIN_JS, map_script_url
 
 
 _HOME_CSS = """
@@ -151,22 +152,17 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         f"const TOOL = {{ venuesT: {T_GOR_VENUES} }};\n"
         f"const HM_GK = {repr(gk)};\n"
         f"const HM_MAP_ID = {repr(gmap_id)};\n"
+        f"const HM_SCRIPT_URL = {repr(map_script_url(gk, '_homeMapReadyCb'))};\n"
     )
 
-    js_body = r"""
+    js_body = MAP_PALETTE_JS + OFFICE_PIN_JS + r"""
 // ═══════════════════════════════════════════════════════════════════════
 // Home map — embedded interactive map with toggleable layers.
-// Pin factories ported inline from execution/field_rep/pages/map.py
-// (TODO v2: extract to a shared `_map_helpers.py` so both pages reuse).
+// Color palettes + office-pin factory come from hub.maps (injected above).
 // ═══════════════════════════════════════════════════════════════════════
-const _HM_STATUS_COLORS = {
-  'Pending':     '#9e9e9e',
-  'In Progress': '#fbbc04',
-  'Visited':     '#34a853',
-  'Skipped':     '#f97316',
-  'Not Reached': '#ef4444',
-};
-const _HM_BOX_COLORS = { action:'#ef4444', warning:'#f59e0b', ok:'#059669' };
+// Aliases so existing references stay terse.
+const _HM_STATUS_COLORS = _MAP_STATUS_COLORS;
+const _HM_BOX_COLORS    = _MAP_BOX_COLORS;
 const _HM_OVERDUE_COLOR = '#ef4444';
 
 const HM_LAYERS = ['route','boxes','visits','overdue'];
@@ -263,8 +259,7 @@ function hmInit() {
   } else {
     window._homeMapReadyCb = _hmReady;
     const s = document.createElement('script');
-    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + HM_GK
-          + '&v=weekly&libraries=marker&callback=_homeMapReadyCb';
+    s.src = HM_SCRIPT_URL;  // built server-side via hub.maps.map_script_url
     s.async = true;
     s.onerror = () => {
       const card = document.getElementById('home-map-card');
@@ -289,16 +284,13 @@ function _hmReady() {
   // Hide the loading placeholder
   const loading = document.getElementById('hm-map-empty');
   if (loading) loading.style.display = 'none';
-  // Office star marker (always visible)
-  if (google.maps.marker && google.maps.marker.PinElement) {
-    const officePin = new google.maps.marker.PinElement({
-      background: '#1e3a5f', borderColor: '#0f1e35',
-      glyphColor: '#fff', glyph: '★', scale: 1.3,
-    });
+  // Office marker (always visible) — navy star variant from hub.maps.
+  const officeContent = _mapOfficePinNavy();
+  if (officeContent && google.maps.marker && google.maps.marker.AdvancedMarkerElement) {
     new google.maps.marker.AdvancedMarkerElement({
       position: opts.center, map: _hmMap,
       title: 'Reform Chiropractic',
-      content: officePin.element,
+      content: officeContent,
     });
   }
   hmRefreshLayers();

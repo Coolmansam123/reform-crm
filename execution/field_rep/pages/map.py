@@ -7,6 +7,9 @@ from hub.shared import (
     T_GOR_VENUES, T_GOR_ACTS, T_GOR_BOXES, T_COM_VENUES, T_COM_ACTS,
 )
 from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
+from hub.maps import (
+    MAP_PALETTE_JS, OFFICE_PIN_JS, PULSE_KEYFRAME_CSS, map_script_url,
+)
 
 
 def _mobile_map_page(br: str, bt: str, user: dict = None) -> str:
@@ -14,17 +17,9 @@ def _mobile_map_page(br: str, bt: str, user: dict = None) -> str:
     gmap_id = os.environ.get("GOOGLE_MAPS_MAP_ID", "")
     user = user or {}
     user_name = user.get('name', '')
-    # Pulse keyframe for high-attention pins (overdue boxes). Local to map page.
-    map_css = (
-        '<style>'
-        '@keyframes gpulse {'
-        ' 0%{transform:scale(1);opacity:.55}'
-        ' 100%{transform:scale(1.7);opacity:0}'
-        '}'
-        '</style>'
-    )
+    # Pulse keyframe (gpulse) sourced from hub.maps for parity across pages.
     body = (
-        map_css
+        PULSE_KEYFRAME_CSS
         # Full-screen map -- breaks out of mobile-wrap via position:fixed
         + '<div class="m-map-wrap" id="gmap">'
         '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:14px">Loading map...</div>'
@@ -51,7 +46,7 @@ def _mobile_map_page(br: str, bt: str, user: dict = None) -> str:
         '<div id="m-sheet-body" style="padding:0 0 20px"></div>'
         '</div>'
     )
-    map_js = f"""
+    map_js = MAP_PALETTE_JS + OFFICE_PIN_JS + f"""
 window.onerror = function(msg, url, line) {{
   if (line === 0 || msg === 'Script error.') return true;
   var el = document.getElementById('gmap');
@@ -59,14 +54,18 @@ window.onerror = function(msg, url, line) {{
 }};
 const GK = {repr(gk)};
 const GMAP_ID = {repr(gmap_id)};
+const MAP_SCRIPT_URL_FOR_PAGE = {repr(map_script_url(gk, '_gMapReadyCb'))};
 const _GGOR_TID = {T_GOR_VENUES};
 const _GCOM_TID = {T_COM_VENUES};
 const _GGOR_ACTS = {T_GOR_ACTS};
 const _GCOM_ACTS = {T_COM_ACTS};
 const _GBOXES   = {T_GOR_BOXES};
 const _GOFF_LAT = 33.9478, _GOFF_LNG = -118.1335;
-const _GSTATUS_COLORS = {{'Not Contacted':'#4285f4','Contacted':'#fbbc04','In Discussion':'#ff9800','Active Partner':'#34a853','Active Relationship':'#34a853'}};
-const _GTOOL_BORDER   = {{'gorilla':'#ea580c','community':'#059669'}};
+// Color palettes come from hub.maps (MAP_PALETTE_JS injected above). These
+// aliases let existing references to _GSTATUS_COLORS / _GTOOL_BORDER stay
+// untouched throughout this module.
+const _GSTATUS_COLORS = _MAP_STATUS_COLORS;
+const _GTOOL_BORDER   = _MAP_TOOL_BORDER;
 
 var _gVenues = [], _gFilter = 'all', _gStatusFilter = '', _gSearch = '', _gMap, _gMarkers = {{}};
 var _currentVenueM = null;
@@ -172,17 +171,17 @@ function initGMap() {{
     }};
     if (GMAP_ID) mapOpts.mapId = GMAP_ID;
     _gMap = new google.maps.Map(el, mapOpts);
-    // Office marker — AdvancedMarkerElement with a star-glyph PinElement.
-    if (google.maps.marker && google.maps.marker.AdvancedMarkerElement && google.maps.marker.PinElement) {{
-      var officePin = new google.maps.marker.PinElement({{
-        background: '#ea4335', borderColor: '#b31412',
-        glyphColor: '#fff', glyph: '★', scale: 1.1,
-      }});
-      new google.maps.marker.AdvancedMarkerElement({{
-        position: {{lat: _GOFF_LAT, lng: _GOFF_LNG}}, map: _gMap,
-        title: 'Reform Chiropractic',
-        content: officePin.element,
-      }});
+    // Office marker — AdvancedMarkerElement with the shared red-star PinElement
+    // (factory in hub.maps.OFFICE_PIN_JS).
+    if (google.maps.marker && google.maps.marker.AdvancedMarkerElement) {{
+      var officeContent = _mapOfficePin();
+      if (officeContent) {{
+        new google.maps.marker.AdvancedMarkerElement({{
+          position: {{lat: _GOFF_LAT, lng: _GOFF_LNG}}, map: _gMap,
+          title: 'Reform Chiropractic',
+          content: officeContent,
+        }});
+      }}
     }}
     setTimeout(function(){{ google.maps.event.trigger(_gMap, 'resize'); _gMap.setCenter({{lat: _GOFF_LAT, lng: _GOFF_LNG}}); }}, 100);
     renderGMarkers();
@@ -205,7 +204,7 @@ function initGMap() {{
     }}
   }};
   var s = document.createElement('script');
-  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + GK + '&v=weekly&libraries=marker&callback=_gMapReadyCb';
+  s.src = MAP_SCRIPT_URL_FOR_PAGE;  // built server-side via hub.maps.map_script_url
   s.async = true;
   s.onerror = function() {{
     document.getElementById('gmap').innerHTML = '<div style="padding:40px;text-align:center;color:#ef4444;font-size:14px">Failed to load Google Maps script. Check API key &amp; network.</div>';

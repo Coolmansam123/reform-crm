@@ -24,6 +24,10 @@ from dotenv import load_dotenv
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+# Make `hub.*` importable when invoked from the workspace root.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from hub.maps import ICON_BRIDGE_JS  # noqa: E402
+
 load_dotenv()
 
 BASEROW_URL = os.getenv("BASEROW_URL")
@@ -677,18 +681,9 @@ function markerIcon(color, scale=9, bizType=null, ringColor=null) {{
   }};
 }}
 
-// AdvancedMarker bridge: wrap legacy {{url, scaledSize, anchor}} icon objects
-// in an <img>. AdvancedMarker anchors content's bottom-center at marker.position.
-function _iconEl(iconObj) {{
-  const img = document.createElement('img');
-  img.src = iconObj.url;
-  if (iconObj.scaledSize) {{
-    img.style.width  = iconObj.scaledSize.width  + 'px';
-    img.style.height = iconObj.scaledSize.height + 'px';
-    img.style.display = 'block';
-  }}
-  return img;
-}}
+{ICON_BRIDGE_JS}
+// Alias kept so existing `_iconEl(...)` call sites stay terse.
+const _iconEl = _mapIconEl;
 
 function homeMarkerIcon() {{
   const w = 34, h = 38;
