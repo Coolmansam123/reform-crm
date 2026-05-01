@@ -23,37 +23,22 @@ def _mobile_events_page(br: str, bt: str, user: dict = None, archive: bool = Fal
     title = 'Archived Events' if archive else 'Events'
     subtitle = 'Past &amp; closed events' if archive else 'Upcoming &amp; recent events'
     toggle_link = (
-        '<a href="/events" style="color:#3b82f6;font-size:12px;text-decoration:none">&larr; Back to active</a>'
+        '<a href="/events" style="color:var(--primary);font-size:12px;font-weight:600;text-decoration:none">&larr; Back to active</a>'
         if archive else
-        '<a href="/events/archive" style="color:#3b82f6;font-size:12px;text-decoration:none">View archive &rarr;</a>'
-    )
-    cta_html = (
-        ''
-        if archive else
-        '<button onclick="openGFRChooser()" '
-        'style="width:100%;background:#004ac6;color:#fff;border:none;border-radius:8px;'
-        'padding:12px;font-size:15px;font-weight:700;cursor:pointer;min-height:44px;margin-bottom:10px">'
-        '+ Schedule Event</button>'
+        '<a href="/events/archive" style="color:var(--primary);font-size:12px;font-weight:600;text-decoration:none">View archive &rarr;</a>'
     )
 
-    body = (
-        '<div class="mobile-hdr">'
-        f'<div><div class="mobile-hdr-title">{title}</div>'
-        f'<div class="mobile-hdr-sub">{subtitle}</div></div>'
-        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
-        '</div>'
-        '<div class="mobile-body">'
-        f'<div style="margin-bottom:8px">{toggle_link}</div>'
-        + cta_html +
-        # Status chip strip
-        '<div id="evt-status-chips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;'
-        'margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>'
-        # List container
-        '<div id="evt-list" style="font-size:13px">'
-        '<div style="color:var(--text3);padding:20px;text-align:center">Loading…</div>'
-        '</div>'
-        '</div>'
-        # Detail modal
+    # Week-strip + Next-Up hero are active-page-only; FAB lives there too.
+    week_strip_slot = '' if archive else '<div id="evt-week-strip" style="margin-bottom:16px"></div>'
+    next_up_slot    = '' if archive else '<div id="evt-next-up" style="margin-bottom:16px"></div>'
+    fab_html = (
+        '' if archive else
+        '<button class="fab" onclick="openGFRChooser()" aria-label="Schedule event">'
+        '<span class="material-symbols-outlined">add</span></button>'
+    )
+    list_section_label = 'Past events' if archive else 'Upcoming events'
+
+    modal_html = (
         '<div id="evt-modal-bg" onclick="if(event.target===this)closeEventModal()" '
         'style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1100;'
         'align-items:flex-start;justify-content:center;padding:30px 14px;overflow-y:auto">'
@@ -68,6 +53,27 @@ def _mobile_events_page(br: str, bt: str, user: dict = None, archive: bool = Fal
         '<div id="evt-modal-status" style="text-align:center;margin-top:10px;font-size:13px;min-height:20px"></div>'
         '</div>'
         '</div>'
+    )
+
+    body = (
+        '<div class="mobile-hdr">'
+        + f'<div><div class="mobile-hdr-title">{title}</div>'
+        + f'<div class="mobile-hdr-sub">{subtitle}</div></div>'
+        + '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
+        + '</div>'
+        + '<div class="mobile-body">'
+        + f'<div style="margin-bottom:14px">{toggle_link}</div>'
+        + week_strip_slot
+        + next_up_slot
+        + '<div class="label-caps" style="margin-bottom:6px">Filter by status</div>'
+        + '<div id="evt-status-chips" class="chip-strip" style="margin-bottom:16px"></div>'
+        + f'<div id="evt-list-label" class="label-caps" style="margin-bottom:8px">{list_section_label}</div>'
+        + '<div id="evt-list" style="display:flex;flex-direction:column;gap:10px">'
+        + '<div style="color:var(--text3);padding:20px;text-align:center">Loading…</div>'
+        + '</div>'
+        + '</div>'
+        + fab_html
+        + modal_html
         + LEAD_MODAL_HTML
     )
 
@@ -108,7 +114,9 @@ const _EVT_COLORS = {{
 
 var _events = [];
 var _filterStatus = 'All';
+var _filterDate = null;     // ISO YYYY-MM-DD when a day chip is selected
 var _currentEventId = null;
+var _weekAnchor = null;     // Monday of the visible week (Date object)
 
 function esc(s) {{
   return String(s == null ? '' : s)
@@ -122,20 +130,134 @@ function svJS(v) {{
   return String(v);
 }}
 
-// ── Status chips ─────────────────────────────────────────────────────
+// ── Date helpers ─────────────────────────────────────────────────────
+function _dateKey(d) {{
+  // Local-time YYYY-MM-DD; avoids the UTC drift you get from toISOString()
+  // when the user's tz is west of UTC and it's late at night.
+  var y = d.getFullYear(), m = d.getMonth() + 1, day = d.getDate();
+  return y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+}}
+function _todayKey() {{ return _dateKey(new Date()); }}
+function _addDays(d, n) {{ var x = new Date(d); x.setDate(x.getDate() + n); return x; }}
+function _startOfWeek(d) {{
+  // Sunday-anchored week to match the design system mockup (SUN..SAT).
+  var x = new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate() - x.getDay());
+  return x;
+}}
+const _DOWS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+const _MONTHS = ['January','February','March','April','May','June',
+                 'July','August','September','October','November','December'];
+
+// ── Status pill class mapping (uses .pill primitives in styles.py) ───
+function _pillClass(status) {{
+  switch (status) {{
+    case 'Maybe':       return 'pill pill-warning';
+    case 'Approved':    return 'pill pill-routine';
+    case 'Scheduled':   return 'pill pill-success';
+    case 'Completed':   return 'pill pill-success';
+    case 'Declined':    return 'pill pill-overdue';
+    default:            return 'pill';  // Prospective + unknown
+  }}
+}}
+
+function _eventsOnDate(dKey) {{
+  return _events.filter(function(e) {{ return (e['Event Date'] || '') === dKey; }});
+}}
+
+// ── Week strip ───────────────────────────────────────────────────────
+function renderWeekStrip() {{
+  var box = document.getElementById('evt-week-strip');
+  if (!box) return;
+  if (!_weekAnchor) _weekAnchor = _startOfWeek(new Date());
+  var today = _todayKey();
+  var monthLbl = _MONTHS[_weekAnchor.getMonth()] + ' ' + _weekAnchor.getFullYear();
+  // 7-day grid + month header + prev/next chevrons
+  var html = '<div class="card" style="padding:12px 14px">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  html += '<div><div class="headline-sm">' + esc(monthLbl) + '</div>';
+  html += '<div class="label-caps" style="margin-top:2px">TODAY IS ' + esc(_DOWS[new Date().getDay()]) + ', ' + esc(_MONTHS[new Date().getMonth()].toUpperCase()) + ' ' + new Date().getDate() + '</div></div>';
+  html += '<div style="display:flex;gap:4px">';
+  html += '<button onclick="weekShift(-7)" aria-label="Previous week" style="width:30px;height:30px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center"><span class="material-symbols-outlined" style="font-size:18px">chevron_left</span></button>';
+  html += '<button onclick="weekShift(7)" aria-label="Next week" style="width:30px;height:30px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>';
+  html += '</div></div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+  for (var i = 0; i < 7; i++) {{
+    var day = _addDays(_weekAnchor, i);
+    var key = _dateKey(day);
+    var isToday = (key === today);
+    var isSelected = (_filterDate === key);
+    var hasEvents = _eventsOnDate(key).length > 0;
+    var bg, fg, border;
+    if (isSelected) {{ bg = 'var(--primary)'; fg = '#fff'; border = 'var(--primary)'; }}
+    else if (isToday) {{ bg = 'var(--primary-tint)'; fg = 'var(--primary)'; border = 'var(--primary-tint)'; }}
+    else {{ bg = 'transparent'; fg = 'var(--text)'; border = 'transparent'; }}
+    html += '<button onclick="setDateFilter(\\''+ key +'\\')" '
+         + 'style="display:flex;flex-direction:column;align-items:center;gap:2px;'
+         + 'padding:8px 4px;background:'+bg+';border:1px solid '+border+';border-radius:8px;'
+         + 'color:'+fg+';cursor:pointer;font-family:inherit">'
+         + '<span style="font-size:10px;font-weight:600;letter-spacing:.04em;opacity:.7">'+_DOWS[i]+'</span>'
+         + '<span style="font-size:16px;font-weight:700">'+day.getDate()+'</span>'
+         + (hasEvents ? '<span style="width:4px;height:4px;border-radius:50%;background:'+(isSelected?'#fff':'var(--primary)')+';margin-top:2px"></span>' : '<span style="height:6px"></span>')
+         + '</button>';
+  }}
+  html += '</div>';
+  if (_filterDate) {{
+    html += '<div style="margin-top:10px;text-align:center"><a href="#" onclick="setDateFilter(null);return false" style="font-size:12px;color:var(--primary);font-weight:600;text-decoration:none">Show all dates</a></div>';
+  }}
+  html += '</div>';
+  box.innerHTML = html;
+}}
+function weekShift(days) {{
+  if (!_weekAnchor) _weekAnchor = _startOfWeek(new Date());
+  _weekAnchor = _addDays(_weekAnchor, days);
+  renderWeekStrip();
+}}
+function setDateFilter(key) {{
+  _filterDate = key;
+  if (key) {{
+    var d = new Date(key + 'T00:00:00');
+    _weekAnchor = _startOfWeek(d);
+  }}
+  renderWeekStrip();
+  renderEvents();
+}}
+
+// ── Featured "Next Up" hero card ─────────────────────────────────────
+function renderNextUp() {{
+  var box = document.getElementById('evt-next-up');
+  if (!box) return;
+  var today = _todayKey();
+  var upcoming = _events
+    .filter(function(e) {{ return (e['Event Date'] || '') >= today; }})
+    .sort(function(a, b) {{ return (a['Event Date']||'').localeCompare(b['Event Date']||''); }});
+  var ev = upcoming[0];
+  if (!ev) {{ box.innerHTML = ''; return; }}
+  var nm = ev['Name'] || '(unnamed)';
+  var dt = ev['Event Date'] || '';
+  var et = svJS(ev['Event Type']);
+  var addr = ev['Venue Address'] || '';
+  var sub = [];
+  if (et) sub.push(esc(et));
+  if (dt) sub.push(esc(dt));
+  var subLine = sub.join(' · ');
+  var html = '<div class="card card-featured" onclick="openEventModal('+ev.id+')" style="cursor:pointer;padding:18px 20px">';
+  html += '<div class="label-caps" style="margin-bottom:8px">Next Up</div>';
+  html += '<div style="font-size:18px;font-weight:700;margin-bottom:6px;line-height:1.3">' + esc(nm) + '</div>';
+  if (subLine) html += '<div style="font-size:13px;opacity:.85;margin-bottom:8px">' + subLine + '</div>';
+  if (addr) html += '<div style="font-size:12px;opacity:.75;display:flex;align-items:center;gap:4px"><span class="material-symbols-outlined" style="font-size:14px">location_on</span>' + esc(addr) + '</div>';
+  html += '</div>';
+  box.innerHTML = html;
+}}
+
+// ── Status chips (uses .chip-strip / .chip primitives in styles.py) ──
 function renderStatusChips() {{
   var box = document.getElementById('evt-status-chips');
   if (!box) return;
   var labels = ['All'].concat(_EVT_STATUSES);
   box.innerHTML = labels.map(function(s) {{
     var active = (s === _filterStatus);
-    var color = (s === 'All') ? '#004ac6' : (_EVT_COLORS[s] || '#6b7280');
-    var bg = active ? color : 'var(--bg)';
-    var fg = active ? '#fff' : 'var(--text2)';
-    return '<button onclick="setStatusFilter(\\''+ esc(s) +'\\')" '
-         + 'style="flex:0 0 auto;background:'+bg+';color:'+fg+';border:1px solid '+color+';'
-         + 'border-radius:14px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;'
-         + 'white-space:nowrap;font-family:inherit">'+esc(s)+'</button>';
+    return '<button class="chip' + (active ? ' active' : '') + '" '
+         + 'onclick="setStatusFilter(\\''+ esc(s) +'\\')">'+esc(s)+'</button>';
   }}).join('');
 }}
 
@@ -145,49 +267,93 @@ function setStatusFilter(s) {{
   renderEvents();
 }}
 
-// ── Render list ──────────────────────────────────────────────────────
+// ── Render list (cards with day-badge + status pill, image-hero variant) ──
 function renderEvents() {{
   var box = document.getElementById('evt-list');
+  var label = document.getElementById('evt-list-label');
   if (!box) return;
   var rows = _events.slice();
   if (_filterStatus !== 'All') {{
     rows = rows.filter(function(e) {{ return svJS(e['Event Status']) === _filterStatus; }});
   }}
+  if (_filterDate) {{
+    rows = rows.filter(function(e) {{ return (e['Event Date'] || '') === _filterDate; }});
+  }}
+  // Section label updates with filter context + count
+  if (label) {{
+    var base = IS_ARCHIVE ? 'Past events' : 'Upcoming events';
+    if (_filterDate) {{
+      var d0 = new Date(_filterDate + 'T00:00:00');
+      base = _DOWS[d0.getDay()] + ', ' + _MONTHS[d0.getMonth()] + ' ' + d0.getDate();
+    }}
+    label.innerHTML = esc(base)
+      + ' <span style="color:var(--text4);font-weight:600">· '
+      + rows.length + ' ' + (rows.length === 1 ? 'event' : 'events') + '</span>';
+  }}
   if (!_events.length) {{
+    var emptyCta = IS_ARCHIVE
+      ? ''
+      : '<button onclick="openGFRChooser()" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer">+ Schedule your first event</button>';
     box.innerHTML = '<div style="color:var(--text3);padding:30px 10px;text-align:center">'
                   + '<div style="font-size:14px;margin-bottom:10px">No events yet.</div>'
-                  + '<button onclick="openGFRChooser()" style="background:#004ac6;color:#fff;border:none;'
-                  + 'border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer">'
-                  + '+ Schedule your first event</button></div>';
+                  + emptyCta + '</div>';
     return;
   }}
   if (!rows.length) {{
     box.innerHTML = '<div style="color:var(--text3);padding:30px 10px;text-align:center">'
-                  + '<div style="font-size:14px;margin-bottom:8px">No events match this filter.</div>'
-                  + '<a href="javascript:setStatusFilter(\\'All\\')" style="color:#3b82f6;font-size:13px">Show all</a></div>';
+                  + '<div style="font-size:14px;margin-bottom:8px">No events match.</div>'
+                  + '<a href="#" onclick="setStatusFilter(\\'All\\');setDateFilter(null);return false" '
+                  + 'style="color:var(--primary);font-size:13px;font-weight:600;text-decoration:none">Show all</a></div>';
     return;
   }}
+  var today = _todayKey();
   box.innerHTML = rows.map(function(e) {{
     var nm = e['Name'] || '(unnamed)';
     var et = svJS(e['Event Type']);
     var es = svJS(e['Event Status']) || 'Prospective';
     var dt = e['Event Date'] || '';
+    var addr = e['Venue Address'] || '';
     var leads = e['Lead Count'] || 0;
-    var col = _EVT_COLORS[es] || '#6b7280';
-    var line2bits = [];
-    if (et) line2bits.push(esc(et));
-    if (dt) line2bits.push(esc(dt));
-    var line2 = line2bits.join(' · ');
-    var line3 = leads > 0 ? (leads + ' lead' + (leads > 1 ? 's' : '')) : '';
-    return '<div onclick="openEventModal('+e.id+')" '
-         + 'style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer">'
-         + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
-         + '<span style="font-weight:600">'+esc(nm)+'</span>'
-         + '<span style="background:'+col+'22;color:'+col+';font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap">'+esc(es)+'</span>'
+    var flyer = (e['Flyer URL'] || '').trim();
+    var biz = Array.isArray(e['Business'])
+      ? e['Business'].map(function(b) {{ return b && (b.value || b.name); }}).filter(Boolean).join(', ')
+      : '';
+    var isToday = (dt && dt === today);
+    var cardCls = 'card' + (isToday ? ' card-active' : '');
+    var pillCls = _pillClass(es);
+    // Day badge — TODAY pill if happening today, else DOW + DOM
+    var dayBadge = '';
+    if (isToday) {{
+      dayBadge = '<div class="day-badge" style="background:var(--primary);border-color:var(--primary);color:#fff;min-width:64px">'
+               + '<div class="dow" style="color:rgba(255,255,255,.85)">TODAY</div></div>';
+    }} else if (dt) {{
+      var d1 = new Date(dt + 'T00:00:00');
+      dayBadge = '<div class="day-badge"><div class="dow">' + _DOWS[d1.getDay()] + '</div>'
+               + '<div class="dom">' + d1.getDate() + '</div></div>';
+    }}
+    var metaBits = [];
+    if (et) metaBits.push(esc(et));
+    if (biz) metaBits.push(esc(biz));
+    else if (addr) metaBits.push(esc(addr));
+    var metaLine = metaBits.join(' · ');
+    var leadsLine = leads > 0
+      ? '<span style="display:inline-flex;align-items:center;gap:4px"><span class="material-symbols-outlined" style="font-size:14px">group</span>' + leads + ' lead' + (leads > 1 ? 's' : '') + '</span>'
+      : '';
+    var flyerHtml = flyer
+      ? '<img src="' + esc(flyer) + '" alt="" style="width:100%;height:120px;object-fit:cover;border-radius:6px;margin-bottom:10px;background:var(--bg);display:block">'
+      : '';
+    return '<div class="' + cardCls + '" onclick="openEventModal(' + e.id + ')" style="cursor:pointer">'
+         + flyerHtml
+         + '<div style="display:flex;gap:12px;align-items:flex-start">'
+         + dayBadge
+         + '<div style="flex:1;min-width:0">'
+         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px">'
+         + '<div style="font-size:14px;font-weight:600;color:var(--text);line-height:1.3;min-width:0">' + esc(nm) + '</div>'
+         + '<span class="' + pillCls + '">' + esc(es) + '</span>'
          + '</div>'
-         + (line2 ? '<div style="color:var(--text2);font-size:12px;margin-top:2px">'+line2+'</div>' : '')
-         + (line3 ? '<div style="color:var(--text3);font-size:11px;margin-top:2px">'+line3+'</div>' : '')
-         + '</div>';
+         + (metaLine ? '<div style="font-size:12px;color:var(--text3);margin-top:4px">' + metaLine + '</div>' : '')
+         + (leadsLine ? '<div style="font-size:12px;color:var(--text3);margin-top:8px">' + leadsLine + '</div>' : '')
+         + '</div></div></div>';
   }}).join('');
 }}
 
@@ -460,6 +626,7 @@ async function loadEvents() {{
       return afut ? da.localeCompare(db) : db.localeCompare(da);
     }});
     _events = rows;
+    if (!IS_ARCHIVE) {{ renderWeekStrip(); renderNextUp(); }}
     renderEvents();
     // If URL has a hash like #123, deep-link into that event detail.
     var hash = (window.location.hash || '').replace(/^#/, '');
@@ -482,6 +649,7 @@ async function loadEvents() {{
 window._afterCompanyDataChange = loadEvents;
 
 // ── Init ─────────────────────────────────────────────────────────────
+if (!IS_ARCHIVE) {{ renderWeekStrip(); }}
 renderStatusChips();
 loadEvents();
 """

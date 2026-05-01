@@ -22,24 +22,27 @@ def _mobile_outreach_due_page(br: str, bt: str, user: dict = None) -> str:
     user = user or {}
     body = (
         '<div class="mobile-hdr">'
-        '<div><div class="mobile-hdr-title">To Do</div>'
-        '<div class="mobile-hdr-sub">Follow-ups due + stops you skipped</div></div>'
-        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
-        '</div>'
-        '<div class="mobile-body">'
-        '<div class="stats-row" style="margin-bottom:14px">'
-        '<div class="stat-chip c-red"><div class="label">Total</div><div class="value" id="td-kpi-total">—</div></div>'
-        '<div class="stat-chip c-orange"><div class="label">Skipped</div><div class="value" id="td-kpi-skipped">—</div></div>'
-        '<div class="stat-chip c-yellow"><div class="label">Worst</div><div class="value" id="td-kpi-worst">—</div></div>'
-        '</div>'
-        '<div id="td-route-banner" style="display:none;margin-bottom:12px;padding:8px 12px;border-radius:8px;'
-        'font-size:12px;font-weight:600"></div>'
-        '<div class="mobile-section-lbl" id="td-fu-hdr" style="margin:8px 0 6px">Overdue Follow-Ups</div>'
-        '<div id="td-filter" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap"></div>'
-        '<div id="td-fu-list" style="margin-bottom:18px"><div class="loading">Loading…</div></div>'
-        '<div class="mobile-section-lbl" id="td-sk-hdr" style="margin:8px 0 6px">Skipped Stops</div>'
-        '<div id="td-sk-list"><div class="loading">Loading…</div></div>'
-        '</div>'
+        + '<div><div class="mobile-hdr-title">To Do</div>'
+        + '<div class="mobile-hdr-sub">Follow-ups due + stops you skipped</div></div>'
+        + '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
+        + '</div>'
+        + '<div class="mobile-body">'
+        # Daily Overview stat tiles (3 across — natural fit for 3 KPIs)
+        + '<div class="label-caps" style="margin-bottom:8px">Daily Overview</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">'
+        +   '<div class="stat-tile"><div class="stat-label">Total</div><div class="stat-value" id="td-kpi-total">—</div></div>'
+        +   '<div class="stat-tile"><div class="stat-label">Skipped</div><div class="stat-value" id="td-kpi-skipped" style="color:#d97706">—</div></div>'
+        +   '<div class="stat-tile"><div class="stat-label">Worst</div><div class="stat-value" id="td-kpi-worst" style="color:#ba1a1a">—</div></div>'
+        + '</div>'
+        + '<div id="td-route-banner" style="display:none;margin-bottom:16px"></div>'
+        + '<div class="label-caps" id="td-fu-hdr" style="margin-bottom:8px">Overdue Follow-Ups</div>'
+        + '<div id="td-filter" class="chip-strip" style="margin-bottom:14px"></div>'
+        + '<div id="td-fu-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px">'
+        +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div></div>'
+        + '<div class="label-caps" id="td-sk-hdr" style="margin-bottom:8px">Skipped Stops</div>'
+        + '<div id="td-sk-list" style="display:flex;flex-direction:column;gap:10px">'
+        +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div></div>'
+        + '</div>'
     )
     js = """
 var _OD_ROWS = [];           // overdue follow-ups
@@ -79,14 +82,11 @@ function renderFilter() {
   cats.forEach(function(k) {
     if (k !== 'all' && !counts[k]) return;
     var active = k === _OD_FILTER;
-    var meta = k === 'all' ? {label: 'All', color: '#0f172a'} : CAT_META[k];
+    var label = k === 'all' ? 'All' : (CAT_META[k] || {label: k}).label;
     html +=
-      '<button onclick="setFilter(\\'' + k + '\\')" ' +
-      'style="padding:6px 12px;border-radius:16px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;' +
-      'border:1px solid ' + (active ? meta.color : 'var(--border)') + ';' +
-      'background:' + (active ? meta.color : 'var(--card)') + ';' +
-      'color:' + (active ? '#fff' : 'var(--text2)') + '">' +
-      esc(meta.label) + ' ' + counts[k] + '</button>';
+      '<button class="chip' + (active ? ' active' : '') + '" ' +
+      'onclick="setFilter(\\'' + k + '\\')">' +
+      esc(label) + ' · ' + counts[k] + '</button>';
   });
   document.getElementById('td-filter').innerHTML = html;
 }
@@ -101,20 +101,20 @@ function setFilter(k) {
 // both an active route and a venue id; otherwise an inline status hint.
 function _actionBtn(venueId) {
   if (!venueId) {
-    return '<span style="font-size:10px;color:var(--text4)">no venue</span>';
+    return '<span style="font-size:11px;color:var(--text4)">no venue</span>';
   }
   if (!_ACTIVE_ROUTE_ID) {
-    return '<span style="font-size:10px;color:var(--text4)">no active route</span>';
+    return '<span style="font-size:11px;color:var(--text4)">no active route</span>';
   }
   if (_ADDED_VENUES[venueId]) {
     return '<button disabled style="background:#059669;color:#fff;border:none;border-radius:6px;' +
-           'padding:7px 11px;font-size:12px;font-weight:600;min-height:34px;white-space:nowrap;opacity:.85">' +
+           'padding:8px 12px;font-size:12px;font-weight:600;min-height:36px;white-space:nowrap;opacity:.85">' +
            '\\u2713 Added</button>';
   }
   return '<button onclick="event.stopPropagation();addToRoute(' + venueId + ',this)" ' +
-         'style="background:#004ac6;color:#fff;border:none;border-radius:6px;padding:7px 11px;' +
-         'font-size:12px;font-weight:600;cursor:pointer;min-height:34px;white-space:nowrap">' +
-         '+ Add to route</button>';
+         'style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:8px 12px;' +
+         'font-size:12px;font-weight:600;cursor:pointer;min-height:36px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;font-family:inherit">' +
+         '<span class="material-symbols-outlined" style="font-size:14px">add_road</span>Add to route</button>';
 }
 
 async function addToRoute(venueId, btn) {
@@ -163,36 +163,38 @@ function renderOD() {
     : _OD_ROWS.filter(function(r) { return (r.category || 'other') === _OD_FILTER; });
 
   var hdr = document.getElementById('td-fu-hdr');
-  if (hdr) hdr.textContent = 'Overdue Follow-Ups (' + list.length + ')';
+  if (hdr) hdr.innerHTML = 'Overdue Follow-Ups <span style="color:var(--text4);font-weight:600">· ' + list.length + '</span>';
 
   if (!list.length) {
     document.getElementById('td-fu-list').innerHTML =
-      '<div style="text-align:center;padding:20px 16px;color:var(--text3);font-size:12px">' +
+      '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">' +
       'No overdue follow-ups in this filter.</div>';
     return;
   }
 
   var html = '';
   list.forEach(function(r) {
+    // Card severity by days overdue: 14+ → urgent (red), 7+ → warning (amber), else default
+    var cardCls = 'card';
+    var pillCls = 'pill';
+    if (r.days_overdue >= 14)      { cardCls += ' card-urgent';  pillCls = 'pill pill-overdue'; }
+    else if (r.days_overdue >= 7)  { cardCls += ' card-warning'; pillCls = 'pill pill-warning'; }
     var meta = CAT_META[r.category] || CAT_META.other;
-    var color = overdueColor(r.days_overdue);
-    var label = r.days_overdue === 0 ? 'Today' :
+    var label = r.days_overdue === 0 ? 'Due today' :
                 r.days_overdue === 1 ? '1d overdue' :
                 r.days_overdue + 'd overdue';
     html +=
-      '<div onclick="location.href=\\'/company/' + r.id + '\\'" ' +
-      'style="background:var(--card);border:1px solid var(--border);border-left:3px solid ' + color +
-      ';border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer">' +
+      '<div class="' + cardCls + '" onclick="location.href=\\'/company/' + r.id + '\\'" style="cursor:pointer">' +
       '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">' +
       '<div style="flex:1;min-width:0">' +
-      '<div style="font-size:14px;font-weight:700;color:var(--text);word-break:break-word">' + esc(r.name) + '</div>' +
-      (r.address ? '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + esc(r.address) + '</div>' : '') +
+      '<div style="font-size:14px;font-weight:600;color:var(--text);word-break:break-word">' + esc(r.name) + '</div>' +
+      (r.address ? '<div style="font-size:11px;color:var(--text3);margin-top:3px;display:flex;align-items:center;gap:3px"><span class="material-symbols-outlined" style="font-size:13px">location_on</span>' + esc(r.address) + '</div>' : '') +
       '</div>' +
       '<span style="background:' + meta.color + '22;color:' + meta.color + ';font-size:10px;' +
-      'font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap">' + esc(meta.label) + '</span>' +
+      'font-weight:700;padding:2px 8px;border-radius:9999px;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em">' + esc(meta.label) + '</span>' +
       '</div>' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">' +
-      '<span style="font-size:11px;font-weight:600;color:' + color + '">' + esc(label) + '</span>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px">' +
+      '<span class="' + pillCls + '">' + esc(label) + '</span>' +
       _actionBtn(r.venue_id) +
       '</div>' +
       '</div>';
@@ -202,18 +204,20 @@ function renderOD() {
 
 function renderSK() {
   var hdr = document.getElementById('td-sk-hdr');
-  if (hdr) hdr.textContent = 'Skipped Stops (' + _SK_ROWS.length + ')';
+  if (hdr) hdr.innerHTML = 'Skipped Stops <span style="color:var(--text4);font-weight:600">· ' + _SK_ROWS.length + '</span>';
 
   if (!_SK_ROWS.length) {
     document.getElementById('td-sk-list').innerHTML =
-      '<div style="text-align:center;padding:20px 16px;color:var(--text3);font-size:12px">' +
+      '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">' +
       'No skipped stops in the last 30 days.</div>';
     return;
   }
 
   var html = '';
   _SK_ROWS.forEach(function(r) {
-    var statusColor = r.status === 'Skipped' ? '#f97316' : '#ef4444';
+    // Not Reached → urgent; Skipped → warning
+    var cardCls = r.status === 'Not Reached' ? 'card card-urgent' : 'card card-warning';
+    var pillCls = r.status === 'Not Reached' ? 'pill pill-overdue' : 'pill pill-warning';
     var ago = r.days_ago === 0 ? 'today' :
               r.days_ago === 1 ? '1d ago' :
               r.days_ago + 'd ago';
@@ -222,18 +226,15 @@ function renderSK() {
       : '';
     var cursor = r.company_id ? 'cursor:pointer' : '';
     html +=
-      '<div ' + click +
-      'style="background:var(--card);border:1px solid var(--border);border-left:3px solid ' + statusColor +
-      ';border-radius:10px;padding:12px 14px;margin-bottom:8px;' + cursor + '">' +
+      '<div class="' + cardCls + '" ' + click + 'style="' + cursor + '">' +
       '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">' +
       '<div style="flex:1;min-width:0">' +
-      '<div style="font-size:14px;font-weight:700;color:var(--text);word-break:break-word">' + esc(r.venue_name) + '</div>' +
-      (r.reason ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic">\\u201c' + esc(r.reason) + '\\u201d</div>' : '') +
+      '<div style="font-size:14px;font-weight:600;color:var(--text);word-break:break-word">' + esc(r.venue_name) + '</div>' +
+      (r.reason ? '<div style="font-size:11px;color:var(--text3);margin-top:3px;font-style:italic">\\u201c' + esc(r.reason) + '\\u201d</div>' : '') +
       '</div>' +
-      '<span style="background:' + statusColor + '22;color:' + statusColor + ';font-size:10px;' +
-      'font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap">' + esc(r.status) + '</span>' +
+      '<span class="' + pillCls + '" style="white-space:nowrap">' + esc(r.status) + '</span>' +
       '</div>' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px">' +
       '<span style="font-size:11px;color:var(--text3)">skipped ' + esc(ago) + '</span>' +
       _actionBtn(r.venue_id) +
       '</div>' +
@@ -256,15 +257,13 @@ function renderRouteBanner() {
   if (!el) return;
   el.style.display = 'block';
   if (_ACTIVE_ROUTE_ID) {
-    el.style.background = '#05966915';
-    el.style.border = '1px solid #05966950';
-    el.style.color = '#059669';
-    el.textContent = '\\u2713 Active route detected \\u2014 tap "+ Add to route" to queue stops';
+    el.className = 'card card-success';
+    el.style.cssText = '';
+    el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)"><span class="material-symbols-outlined" style="font-size:18px;color:#059669">check_circle</span>Active route detected \\u2014 tap "Add to route" to queue stops</div>';
   } else {
-    el.style.background = '#64748b15';
-    el.style.border = '1px solid #64748b50';
-    el.style.color = 'var(--text3)';
-    el.textContent = 'No active route today \\u2014 tap a row to open the company';
+    el.className = 'card';
+    el.style.cssText = '';
+    el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text3)"><span class="material-symbols-outlined" style="font-size:18px">info</span>No active route today \\u2014 tap a row to open the company</div>';
   }
 }
 

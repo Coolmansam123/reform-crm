@@ -17,47 +17,44 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
     user_name = user.get('name', '')
     body = (
         '<div class="mobile-hdr">'
-        '<div><div class="mobile-hdr-title">✦ Reform</div>'
-        f'<div class="mobile-hdr-sub">{day_str}</div></div>'
-        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
-        '</div>'
-        '<div class="mobile-body">'
-        f'<div class="mobile-greeting"><h2>Hey, {first} 👋</h2>'
-        '<div class="sub">Ready to hit the field?</div></div>'
-
-        # KPI strip (tappable)
-        '<div class="stats-row" id="m-home-stats">'
-        '<a href="/routes" class="stat-chip c-orange" style="text-decoration:none">'
-        '<div class="label">Today’s Stops</div><div class="value" id="kpi-stops">—</div></a>'
-        '<a href="/todo" class="stat-chip c-red" style="text-decoration:none">'
-        '<div class="label">Overdue</div><div class="value" id="kpi-overdue">—</div></a>'
-        '<a href="/lead" class="stat-chip c-blue" style="text-decoration:none">'
-        '<div class="label">Leads (7d)</div><div class="value" id="kpi-leads">—</div></a>'
-        '<a href="/routes" class="stat-chip c-green" style="text-decoration:none">'
-        '<div class="label">Active Routes</div><div class="value" id="kpi-routes">—</div></a>'
-        '</div>'
-
-        # Today's Route panel
-        '<div class="panel">'
-        '<div class="panel-hd"><span class="panel-title">🗺️ Today’s Route</span>'
-        '<span class="panel-ct" id="today-ct">—</span></div>'
-        '<div class="panel-body" id="today-body"><div class="loading" style="padding:16px">Loading…</div></div>'
-        '</div>'
-
-        # Needs Attention panel
-        '<div class="panel">'
-        '<div class="panel-hd"><span class="panel-title">🔴 Needs Attention</span>'
-        '<span class="panel-ct" id="attn-ct">—</span></div>'
-        '<div class="panel-body" id="attn-body"><div class="loading" style="padding:16px">Loading…</div></div>'
-        '</div>'
-
-        # Massage Boxes panel
-        '<div class="panel">'
-        '<div class="panel-hd"><span class="panel-title">📦 Massage Boxes</span>'
-        '<span class="panel-ct" id="box-ct">—</span></div>'
-        '<div class="panel-body" id="box-body"><div class="loading" style="padding:16px">Loading…</div></div>'
-        '</div>'
-        '</div>'
+        + '<div><div class="mobile-hdr-title">Reform</div>'
+        + f'<div class="mobile-hdr-sub">{day_str}</div></div>'
+        + '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
+        + '</div>'
+        + '<div class="mobile-body">'
+        + f'<div style="margin-bottom:18px"><div style="font-size:22px;font-weight:700;color:var(--text);margin-bottom:2px">Hey, {first}</div>'
+        + '<div style="font-size:13px;color:var(--text3)">Ready to hit the field?</div></div>'
+        # 2x2 stat tile grid
+        + '<div class="label-caps" style="margin-bottom:8px">Daily Overview</div>'
+        + '<div class="stat-grid" style="margin-bottom:20px">'
+        +   '<a href="/routes" class="stat-tile" style="text-decoration:none;cursor:pointer">'
+        +     '<div class="stat-label">Today\'s stops</div><div class="stat-value" id="kpi-stops">—</div></a>'
+        +   '<a href="/todo" class="stat-tile" style="text-decoration:none;cursor:pointer">'
+        +     '<div class="stat-label">Overdue</div><div class="stat-value" id="kpi-overdue" style="color:#ba1a1a">—</div></a>'
+        +   '<a href="/lead" class="stat-tile" style="text-decoration:none;cursor:pointer">'
+        +     '<div class="stat-label">Leads (7d)</div><div class="stat-value" id="kpi-leads">—</div></a>'
+        +   '<a href="/routes" class="stat-tile" style="text-decoration:none;cursor:pointer">'
+        +     '<div class="stat-label">Active routes</div><div class="stat-value" id="kpi-routes">—</div></a>'
+        + '</div>'
+        # Today's route — featured card slot
+        + '<div class="label-caps" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
+        +   '<span class="material-symbols-outlined" style="font-size:14px">map</span>'
+        +   'Today\'s route<span id="today-ct" style="margin-left:auto;color:var(--text4);font-weight:600"></span></div>'
+        + '<div id="today-body" style="margin-bottom:20px">'
+        +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div></div>'
+        # Needs Attention
+        + '<div class="label-caps" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
+        +   '<span class="material-symbols-outlined" style="font-size:14px;color:#ba1a1a">priority_high</span>'
+        +   'Needs attention<span id="attn-ct" style="margin-left:auto;color:var(--text4);font-weight:600"></span></div>'
+        + '<div id="attn-body" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">'
+        +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div></div>'
+        # Massage Boxes
+        + '<div class="label-caps" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
+        +   '<span class="material-symbols-outlined" style="font-size:14px">inventory_2</span>'
+        +   'Massage boxes<span id="box-ct" style="margin-left:auto;color:var(--text4);font-weight:600"></span></div>'
+        + '<div id="box-body" style="display:flex;flex-direction:column;gap:10px">'
+        +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div></div>'
+        + '</div>'
     )
     user_email = (user.get('email', '') or '').strip().lower()
     script_js = f"""
@@ -93,7 +90,7 @@ async function loadHomeDashboard() {{
   }}).length;
 
   let todayStops = 0;
-  let todayBody = '<div class="empty" style="padding:16px 18px;color:var(--text3);font-size:13px">No route assigned today</div>';
+  let todayBody = '<div class="card" style="color:var(--text3);text-align:center;font-size:13px;padding:18px">No route assigned today</div>';
   if (todayRoute) {{
     const ts = stops.filter(s => {{
       const rl = s['Route']; return Array.isArray(rl) && rl.some(x => x.id === todayRoute.id);
@@ -101,9 +98,10 @@ async function loadHomeDashboard() {{
     todayStops = ts.length;
     const done = ts.filter(s => sv(s['Status']) === 'Visited' || sv(s['Status']) === 'Skipped').length;
     const name = esc(todayRoute['Name'] || "Today's Route");
-    todayBody = `<a href="/route" style="display:block;padding:14px 18px;text-decoration:none;color:inherit">
-      <div style="font-size:15px;font-weight:700;margin-bottom:4px">${{name}}</div>
-      <div style="font-size:12px;color:var(--text3)">${{done}} of ${{ts.length}} stops done • Tap to start →</div></a>`;
+    todayBody = `<a href="/route" class="card card-featured" style="display:block;text-decoration:none;color:inherit;cursor:pointer;padding:18px 20px">
+      <div class="label-caps" style="margin-bottom:6px">Active route</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px;line-height:1.3">${{name}}</div>
+      <div style="font-size:13px;opacity:.88">${{done}} of ${{ts.length}} stops done · Tap to continue &rarr;</div></a>`;
     document.getElementById('today-ct').textContent = todayStops + ' stops';
   }} else {{
     document.getElementById('today-ct').textContent = '';
@@ -123,16 +121,16 @@ async function loadHomeDashboard() {{
   document.getElementById('kpi-leads').textContent = recentLeads;
   document.getElementById('kpi-routes').textContent = activeRoutes;
 
-  // Needs Attention: top 5 overdue
+  // Needs Attention: top 5 overdue (cards with red left-border)
   const topOverdue = (Array.isArray(overdueResp) ? overdueResp : []).slice(0, 5);
-  document.getElementById('attn-ct').textContent = (Array.isArray(overdueResp) ? overdueResp.length : 0) + ' overdue';
+  const overdueTotal = Array.isArray(overdueResp) ? overdueResp.length : 0;
+  document.getElementById('attn-ct').textContent = overdueTotal ? '· ' + overdueTotal + ' overdue' : '';
   document.getElementById('attn-body').innerHTML = topOverdue.length ? topOverdue.map(c => `
-    <a href="/company/${{c.id}}" class="a-row" style="text-decoration:none;color:inherit">
-      <div class="dot dot-r"></div>
-      <span class="a-name">${{esc(c.name)}}</span>
-      <span class="a-meta" style="color:#ef4444">${{c.days_overdue}}d</span>
+    <a href="/company/${{c.id}}" class="card card-urgent" style="display:flex;align-items:center;justify-content:space-between;gap:8px;text-decoration:none;color:inherit;cursor:pointer">
+      <span style="font-size:14px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${{esc(c.name)}}</span>
+      <span class="pill pill-overdue" style="white-space:nowrap">${{c.days_overdue}}d overdue</span>
     </a>
-  `).join('') : '<div class="empty" style="padding:16px 18px;color:var(--text3);font-size:13px">All caught up ✓</div>';
+  `).join('') : '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">All caught up &check;</div>';
 
   // Massage Boxes: all active, sorted by most overdue first
   const activeBoxes = boxes.filter(b => sv(b['Status']) === 'Active' && b['Date Placed']);
@@ -148,26 +146,26 @@ async function loadHomeDashboard() {{
   rows.sort((a, b) => b.overdue - a.overdue);
   window._boxRows = rows;
 
-  document.getElementById('box-ct').textContent = rows.length + ' active';
+  document.getElementById('box-ct').textContent = rows.length ? '· ' + rows.length + ' active' : '';
   const routeId = todayRoute ? todayRoute.id : null;
   document.getElementById('box-body').innerHTML = rows.length ? rows.map((x, i) => {{
-    let badge;
-    if (x.overdue > 0) badge = '<span style="background:#ef444420;color:#ef4444;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600">' + x.overdue + 'd overdue</span>';
-    else if (x.overdue === 0) badge = '<span style="background:#f59e0b20;color:#f59e0b;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600">due today</span>';
-    else if (x.overdue >= -2) badge = '<span style="background:#f59e0b20;color:#f59e0b;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600">due in ' + (-x.overdue) + 'd</span>';
-    else badge = '<span style="background:#05966920;color:#059669;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600">' + (-x.overdue) + 'd left</span>';
+    let pill, cardAccent = '';
+    if (x.overdue > 0)        {{ pill = '<span class="pill pill-overdue">' + x.overdue + 'd overdue</span>'; cardAccent = ' card-urgent'; }}
+    else if (x.overdue === 0) {{ pill = '<span class="pill pill-warning">due today</span>'; cardAccent = ' card-warning'; }}
+    else if (x.overdue >= -2) {{ pill = '<span class="pill pill-warning">due in ' + (-x.overdue) + 'd</span>'; cardAccent = ' card-warning'; }}
+    else                      {{ pill = '<span class="pill pill-success">' + (-x.overdue) + 'd left</span>'; }}
     const btn = (routeId && x.venueId)
-      ? '<button id="box-add-' + i + '" onclick="addBoxToTodayRoute(' + i + ')" style="background:#004ac6;color:#fff;border:none;border-radius:6px;padding:7px 11px;font-size:12px;font-weight:600;cursor:pointer;min-height:34px;white-space:nowrap">+ Add</button>'
-      : '<span style="font-size:10px;color:var(--text4)">' + (routeId ? 'no venue' : 'no active route') + '</span>';
+      ? '<button id="box-add-' + i + '" onclick="addBoxToTodayRoute(' + i + ')" style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;min-height:36px;white-space:nowrap">+ Add</button>'
+      : '<span style="font-size:11px;color:var(--text4);white-space:nowrap">' + (routeId ? 'no venue' : 'no active route') + '</span>';
     const companyId = venueCoMap[x.venueId];
     const nameHtml = companyId
       ? '<a href="/company/' + companyId + '" style="font-size:14px;font-weight:600;color:var(--text);text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.venueName) + '</a>'
       : '<div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.venueName) + '</div>';
-    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border)">'
+    return '<div class="card' + cardAccent + '" style="display:flex;align-items:center;justify-content:space-between;gap:12px">'
       + '<div style="flex:1;min-width:0">' + nameHtml
-      +   '<div style="margin-top:4px">' + badge + ' <span style="font-size:11px;color:var(--text3)">placed ' + esc(fmt(x.placed)) + '</span></div>'
+      +   '<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pill + '<span style="font-size:11px;color:var(--text3)">placed ' + esc(fmt(x.placed)) + '</span></div>'
       + '</div>' + btn + '</div>';
-  }}).join('') : '<div class="empty" style="padding:16px 18px;color:var(--text3);font-size:13px">No active boxes</div>';
+  }}).join('') : '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">No active boxes</div>';
   window._todayRouteId = routeId;
 }}
 

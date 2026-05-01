@@ -12,40 +12,7 @@ def _mobile_lead_capture_page(br: str, bt: str, user: dict = None) -> str:
     user = user or {}
     user_name = user.get('name', '')
     user_email = (user.get('email', '') or '').strip().lower()
-    body = (
-        '<div class="mobile-hdr">'
-        '<div><div class="mobile-hdr-title">Leads</div>'
-        '<div class="mobile-hdr-sub">All captured leads</div></div>'
-        '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
-        '</div>'
-        '<div class="mobile-body">'
-        # ── Toolbar ──────────────────────────────────────────────────
-        # "+ New Lead" lives in a FAB (bottom-right) — see end of body.
-        '<input type="text" id="leads-search" placeholder="Search name, phone, email, source…" '
-        'oninput="onSearchInput()" '
-        'style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text);'
-        'border-radius:8px;padding:9px 12px;font-size:14px;box-sizing:border-box;margin-bottom:8px">'
-        # Status filter chips
-        '<div id="leads-status-chips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;'
-        '-webkit-overflow-scrolling:touch"></div>'
-        # Mine/All toggle
-        '<div style="display:flex;gap:0;margin-bottom:14px;border:1px solid var(--border);border-radius:8px;overflow:hidden">'
-        '<button id="scope-all" onclick="setScope(\'all\')" '
-        'style="flex:1;background:#004ac6;color:#fff;border:none;padding:8px;font-size:13px;font-weight:600;cursor:pointer">'
-        'All</button>'
-        '<button id="scope-mine" onclick="setScope(\'mine\')" '
-        'style="flex:1;background:none;color:var(--text2);border:none;padding:8px;font-size:13px;font-weight:600;cursor:pointer">'
-        'Mine only</button>'
-        '</div>'
-        # ── List container ───────────────────────────────────────────
-        '<div id="leads-list" style="font-size:13px">'
-        '<div style="color:var(--text3);padding:20px;text-align:center">Loading…</div>'
-        '</div>'
-        '</div>'
-        # ── New Lead FAB (replaces the full-width toolbar button) ────
-        '<button class="fab" onclick="openCaptureModal()" aria-label="New lead">'
-        '<span class="material-symbols-outlined">add</span></button>'
-        # ── Capture lead modal ──────────────────────────────────────
+    capture_modal_html = (
         '<div id="capture-modal-bg" onclick="if(event.target===this)closeCaptureModal()" '
         'style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1100;'
         'align-items:flex-start;justify-content:center;padding:30px 14px;overflow-y:auto">'
@@ -58,28 +25,24 @@ def _mobile_lead_capture_page(br: str, bt: str, user: dict = None) -> str:
         '</div>'
         '<div id="capture-modal-body">'
         '<div id="lead-form">'
-        # Name
         '<div style="margin-bottom:12px">'
         '<label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Name *</label>'
         '<input type="text" id="lf-name" placeholder="Full name" '
         'style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text);'
         'border-radius:8px;padding:10px 12px;font-size:14px;box-sizing:border-box">'
         '</div>'
-        # Phone
         '<div style="margin-bottom:12px">'
         '<label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Phone *</label>'
         '<input type="tel" id="lf-phone" placeholder="(555) 123-4567" '
         'style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text);'
         'border-radius:8px;padding:10px 12px;font-size:14px;box-sizing:border-box">'
         '</div>'
-        # Email
         '<div style="margin-bottom:12px">'
         '<label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Email</label>'
         '<input type="email" id="lf-email" placeholder="email@example.com" '
         'style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text);'
         'border-radius:8px;padding:10px 12px;font-size:14px;box-sizing:border-box">'
         '</div>'
-        # Service Interested
         '<div style="margin-bottom:12px">'
         '<label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Service Interested *</label>'
         '<select id="lf-service" '
@@ -93,7 +56,6 @@ def _mobile_lead_capture_page(br: str, bt: str, user: dict = None) -> str:
         '<option value="Other">Other</option>'
         '</select>'
         '</div>'
-        # Event (dropdown loaded from API)
         '<div style="margin-bottom:12px">'
         '<label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Event / Source</label>'
         '<select id="lf-event" '
@@ -102,7 +64,6 @@ def _mobile_lead_capture_page(br: str, bt: str, user: dict = None) -> str:
         '<option value="">No event (walk-in / field)</option>'
         '</select>'
         '</div>'
-        # Referred from company
         '<div style="margin-bottom:12px">'
         '<label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Referred from company (optional)</label>'
         '<input type="text" id="lf-company" list="lf-company-list" placeholder="Type to search…" '
@@ -111,14 +72,12 @@ def _mobile_lead_capture_page(br: str, bt: str, user: dict = None) -> str:
         '<datalist id="lf-company-list"></datalist>'
         '<div id="lf-company-hint" style="font-size:11px;color:var(--text3);margin-top:4px;min-height:14px"></div>'
         '</div>'
-        # Notes
         '<div style="margin-bottom:14px">'
         '<label style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Notes</label>'
         '<textarea id="lf-notes" rows="3" placeholder="Additional details…" '
         'style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text);'
         'border-radius:8px;padding:10px 12px;font-size:14px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
         '</div>'
-        # Submit
         '<button id="lf-submit" onclick="submitLead()" '
         'style="width:100%;background:#004ac6;color:#fff;border:none;border-radius:8px;'
         'padding:13px;font-size:15px;font-weight:700;cursor:pointer">'
@@ -128,7 +87,46 @@ def _mobile_lead_capture_page(br: str, bt: str, user: dict = None) -> str:
         '</div>'
         '</div>'
         '</div>'
-        # ── Detail modal (shared) ────────────────────────────────────
+    )
+    body = (
+        '<div class="mobile-hdr">'
+        + '<div><div class="mobile-hdr-title">Leads</div>'
+        + '<div class="mobile-hdr-sub">All captured leads</div></div>'
+        + '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
+        + '</div>'
+        + '<div class="mobile-body">'
+        # 2x stat tiles: total + conversion %
+        + '<div class="stat-grid" style="margin-bottom:18px">'
+        +   '<div class="stat-tile"><div class="stat-label">Active Leads</div>'
+        +     '<div class="stat-value" id="lead-kpi-active">—</div>'
+        +     '<div class="stat-sub" id="lead-kpi-total">of — total</div></div>'
+        +   '<div class="stat-tile"><div class="stat-label">Conversion</div>'
+        +     '<div class="stat-value" id="lead-kpi-conv" style="color:#059669">—</div>'
+        +     '<div class="stat-sub" id="lead-kpi-conv-sub">last 30 days</div></div>'
+        + '</div>'
+        # Search + Mine/All scope chips inline
+        + '<div style="position:relative;margin-bottom:12px">'
+        +   '<span class="material-symbols-outlined" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:18px">search</span>'
+        +   '<input type="text" id="leads-search" placeholder="Search name, phone, email, source…" '
+        +     'oninput="onSearchInput()" '
+        +     'style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text);'
+        +     'border-radius:8px;padding:10px 12px 10px 36px;font-size:14px;box-sizing:border-box">'
+        + '</div>'
+        + '<div class="chip-strip" style="margin-bottom:14px">'
+        +   '<button id="scope-all" class="chip active" onclick="setScope(\'all\')">All leads</button>'
+        +   '<button id="scope-mine" class="chip" onclick="setScope(\'mine\')">Mine only</button>'
+        + '</div>'
+        + '<div class="label-caps" style="margin-bottom:6px">Filter by status</div>'
+        + '<div id="leads-status-chips" class="chip-strip" style="margin-bottom:16px"></div>'
+        + '<div class="label-caps" id="lead-list-label" style="margin-bottom:8px">Recent leads</div>'
+        + '<div id="leads-list" style="display:flex;flex-direction:column;gap:10px">'
+        +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div>'
+        + '</div>'
+        + '</div>'
+        # ── New Lead FAB (replaces the full-width toolbar button) ────
+        + '<button class="fab" onclick="openCaptureModal()" aria-label="New lead">'
+        +   '<span class="material-symbols-outlined">add</span></button>'
+        + capture_modal_html
         + LEAD_MODAL_HTML
     )
     js = f"""
@@ -156,20 +154,28 @@ function svJS(v) {{
   return String(v);
 }}
 
-// ── Status chip strip ───────────────────────────────────────────────
+// ── Status pill class mapping ───────────────────────────────────────
+function _leadPillClass(status) {{
+  switch (status) {{
+    case 'New':              return 'pill pill-routine';
+    case 'Contacted':        return 'pill pill-warning';
+    case 'Appointment Set':  return 'pill pill-routine';
+    case 'Patient Seen':     return 'pill pill-success';
+    case 'Converted':        return 'pill pill-success';
+    case 'Dropped':          return 'pill pill-overdue';
+    default:                 return 'pill';
+  }}
+}}
+
+// ── Status chip strip (uses shared .chip primitives) ────────────────
 function renderStatusChips() {{
   var box = document.getElementById('leads-status-chips');
   if (!box) return;
   var labels = ['All'].concat(_STATUSES);
   box.innerHTML = labels.map(function(s) {{
     var active = (s === _filterStatus);
-    var color = (s === 'All') ? '#004ac6' : (_STATUS_COLORS[s] || '#6b7280');
-    var bg = active ? color : 'var(--bg)';
-    var fg = active ? '#fff' : 'var(--text2)';
-    return '<button onclick="setStatusFilter(\\''+ esc(s) +'\\')" '
-         + 'style="flex:0 0 auto;background:'+bg+';color:'+fg+';border:1px solid '+color+';'
-         + 'border-radius:14px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;'
-         + 'white-space:nowrap;font-family:inherit">'+esc(s)+'</button>';
+    return '<button class="chip' + (active ? ' active' : '') + '" '
+         + 'onclick="setStatusFilter(\\''+ esc(s) +'\\')">'+esc(s)+'</button>';
   }}).join('');
 }}
 
@@ -181,16 +187,10 @@ function setStatusFilter(s) {{
 
 function setScope(scope) {{
   _filterScope = scope;
-  // Toggle button styling
   var allBtn = document.getElementById('scope-all');
   var mineBtn = document.getElementById('scope-mine');
-  if (scope === 'all') {{
-    allBtn.style.background = '#004ac6'; allBtn.style.color = '#fff';
-    mineBtn.style.background = 'none'; mineBtn.style.color = 'var(--text2)';
-  }} else {{
-    mineBtn.style.background = '#004ac6'; mineBtn.style.color = '#fff';
-    allBtn.style.background = 'none'; allBtn.style.color = 'var(--text2)';
-  }}
+  if (allBtn)  allBtn.classList.toggle('active', scope === 'all');
+  if (mineBtn) mineBtn.classList.toggle('active', scope === 'mine');
   applyFilters();
 }}
 
@@ -236,48 +236,87 @@ function applyFilters() {{
   renderLeads(rows);
 }}
 
+function _initials(name) {{
+  var parts = String(name || '').trim().split(/\\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}}
+
 function renderLeads(rows) {{
   var box = document.getElementById('leads-list');
+  var label = document.getElementById('lead-list-label');
   if (!box) return;
+  if (label) {{
+    label.innerHTML = 'Recent leads <span style="color:var(--text4);font-weight:600">· '
+                    + rows.length + ' ' + (rows.length === 1 ? 'lead' : 'leads') + '</span>';
+  }}
   if (!_leads.length) {{
-    box.innerHTML = '<div style="color:var(--text3);padding:30px 10px;text-align:center">'
-                  + '<div style="font-size:14px;margin-bottom:10px">No leads yet.</div>'
-                  + '<button onclick="openCaptureModal()" style="background:#004ac6;color:#fff;border:none;'
+    box.innerHTML = '<div class="card" style="color:var(--text3);text-align:center;padding:24px;font-size:13px">'
+                  + '<div style="font-size:14px;margin-bottom:10px;color:var(--text2)">No leads yet.</div>'
+                  + '<button onclick="openCaptureModal()" style="background:var(--primary);color:#fff;border:none;'
                   + 'border-radius:8px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer">'
                   + '+ Capture your first lead</button></div>';
     return;
   }}
   if (!rows.length) {{
-    box.innerHTML = '<div style="color:var(--text3);padding:30px 10px;text-align:center">'
-                  + '<div style="font-size:14px;margin-bottom:8px">No leads match your filters.</div>'
-                  + '<a href="javascript:clearAllFilters()" style="color:#3b82f6;font-size:13px">Clear filters</a></div>';
+    box.innerHTML = '<div class="card" style="color:var(--text3);text-align:center;padding:24px;font-size:13px">'
+                  + '<div style="font-size:14px;margin-bottom:8px;color:var(--text2)">No leads match your filters.</div>'
+                  + '<a href="#" onclick="clearAllFilters();return false" style="color:var(--primary);font-size:13px;font-weight:600;text-decoration:none">Clear filters</a></div>';
     return;
   }}
   box.innerHTML = rows.map(function(L) {{
     var nm = L['Name'] || '(no name)';
     var ph = L['Phone'] || '';
+    var em = L['Email'] || '';
     var rs = svJS(L['Reason']);
     var st = svJS(L['Status']) || 'New';
     var src = L['Source'] || '';
     var dt = (L['Created'] || '').slice(0, 10);
     var col = _STATUS_COLORS[st] || '#6b7280';
-    var line2 = '';
-    if (ph) line2 += esc(ph);
-    if (rs) line2 += (line2 ? ' • ' : '') + esc(rs);
-    var line3parts = [];
-    if (dt) line3parts.push(esc(dt));
-    if (src) line3parts.push(esc(src));
-    var line3 = line3parts.join(' · ');
-    return '<div onclick="openLeadModal('+L.id+')" '
-         + 'style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer">'
-         + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
-         + '<span style="font-weight:600">'+esc(nm)+'</span>'
-         + '<span style="background:'+col+'22;color:'+col+';font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600;white-space:nowrap">'+esc(st)+'</span>'
-         + '</div>'
-         + (line2 ? '<div style="color:var(--text2);font-size:12px;margin-top:2px">'+line2+'</div>' : '')
-         + (line3 ? '<div style="color:var(--text3);font-size:11px;margin-top:2px">'+line3+'</div>' : '')
-         + '</div>';
+    var pillCls = _leadPillClass(st);
+    var initials = _initials(nm);
+    var contactBits = [];
+    if (em) contactBits.push('<span style="display:inline-flex;align-items:center;gap:3px"><span class="material-symbols-outlined" style="font-size:13px">mail</span>' + esc(em) + '</span>');
+    if (ph) contactBits.push('<span style="display:inline-flex;align-items:center;gap:3px"><span class="material-symbols-outlined" style="font-size:13px">call</span>' + esc(ph) + '</span>');
+    var contactRow = contactBits.join('<span style="color:var(--text4)"> · </span>');
+    var subBits = [];
+    if (rs) subBits.push(esc(rs));
+    if (src) subBits.push(esc(src));
+    if (dt) subBits.push(esc(dt));
+    var subLine = subBits.join(' · ');
+    return '<div class="card" onclick="openLeadModal('+L.id+')" style="cursor:pointer">'
+         + '<div style="display:flex;align-items:flex-start;gap:12px">'
+         +   '<div style="width:40px;height:40px;border-radius:50%;background:'+col+'22;color:'+col+';display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">'+esc(initials)+'</div>'
+         +   '<div style="flex:1;min-width:0">'
+         +     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:2px">'
+         +       '<div style="font-size:14px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(nm)+'</div>'
+         +       '<span class="' + pillCls + '">'+esc(st)+'</span>'
+         +     '</div>'
+         +     (subLine ? '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+subLine+'</div>' : '')
+         +     (contactRow ? '<div style="font-size:12px;color:var(--text3);margin-top:6px;display:flex;flex-wrap:wrap;gap:2px">'+contactRow+'</div>' : '')
+         +   '</div>'
+         + '</div></div>';
   }}).join('');
+}}
+
+function renderLeadKPIs() {{
+  var totalEl = document.getElementById('lead-kpi-total');
+  var activeEl = document.getElementById('lead-kpi-active');
+  var convEl = document.getElementById('lead-kpi-conv');
+  var convSubEl = document.getElementById('lead-kpi-conv-sub');
+  if (!_leads.length) return;
+  var openSet = ['New','Contacted','Appointment Set','Patient Seen'];
+  var active = _leads.filter(function(L) {{ return openSet.indexOf(svJS(L.Status)) >= 0; }}).length;
+  // Conversion last 30d: of leads created in window, what % are Converted
+  var thirtyAgo = new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
+  var recent = _leads.filter(function(L) {{ return (L.Created || '').slice(0,10) >= thirtyAgo; }});
+  var converted = recent.filter(function(L) {{ return svJS(L.Status) === 'Converted'; }}).length;
+  var pct = recent.length ? Math.round(100 * converted / recent.length) : 0;
+  if (totalEl)   totalEl.textContent = 'of ' + _leads.length + ' total';
+  if (activeEl)  activeEl.textContent = active;
+  if (convEl)    convEl.textContent = pct + '%';
+  if (convSubEl) convSubEl.textContent = converted + ' of ' + recent.length + ' (30d)';
 }}
 
 // ── Data load ────────────────────────────────────────────────────────
@@ -286,6 +325,7 @@ async function loadLeads() {{
     var rows = await fetchAll({T_LEADS});
     rows.sort(function(a, b) {{ return (b.Created || '').localeCompare(a.Created || ''); }});
     _leads = rows;
+    renderLeadKPIs();
     applyFilters();
   }} catch (e) {{
     var box = document.getElementById('leads-list');
