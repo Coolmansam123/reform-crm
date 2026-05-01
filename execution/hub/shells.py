@@ -90,7 +90,13 @@ def _forbidden_page(br: str, bt: str, user: dict = None) -> str:
 # ─── Mobile page shell ────────────────────────────────────────────────────────────
 def _build_mobile_bottomnav(active: str) -> str:
     """Bottom tab bar — the four most-used routes pinned within thumb reach.
-    Drawer (hamburger) holds everything else. Active tab is highlighted blue."""
+    Drawer (hamburger) holds everything else. Active tab is highlighted blue.
+
+    Dashboard tab also gets an orange dot when the rep is currently checked
+    into a route stop (`Status == 'In Progress'`). The dot is gated by the
+    `body.on-route` class which a small poller in `_mobile_page` toggles
+    by hitting `/api/guerilla/active-stop` every 30s.
+    """
     tabs = [
         ('m_home',     '/',       'dashboard',  'Dashboard'),
         ('m_routes',   '/routes', 'map',        'Map'),
@@ -100,12 +106,23 @@ def _build_mobile_bottomnav(active: str) -> str:
     items = []
     for aid, href, icon, label in tabs:
         cls = 'm-tab' + (' active' if aid == active else '')
+        # Dashboard tab carries a hidden On-Route dot; the .on-route body class
+        # (set by the poller) flips it visible.
+        badge = (
+            '<span class="m-tab-onroute" '
+            'style="position:absolute;top:4px;right:calc(50% - 16px);width:8px;height:8px;'
+            'background:#ea580c;border-radius:50%;display:none;'
+            'box-shadow:0 0 0 2px var(--card)"></span>'
+            if aid == 'm_home' else ''
+        )
         items.append(
-            f'<a class="{cls}" href="{href}">'
+            f'<a class="{cls}" href="{href}" style="position:relative">'
+            f'{badge}'
             f'<span class="material-symbols-outlined">{icon}</span>'
             f'<span class="m-tab-lbl">{label}</span></a>'
         )
-    return '<nav class="m-bottomnav">' + ''.join(items) + '</nav>'
+    return ('<style>body.on-route .m-tab-onroute{display:block!important}</style>'
+            '<nav class="m-bottomnav">' + ''.join(items) + '</nav>')
 
 
 def _build_mobile_drawer(active: str, user: dict) -> str:
@@ -223,6 +240,24 @@ def _mobile_page(active: str, title: str, body_html: str, script_js: str,
         'var t=e.target;'
         'if(t&&t.tagName==="INPUT"&&t.type==="tel") formatPhone(t);'
         '},true);'
+        # ── On-Route badge poller ─────────────────────────────────────────
+        # Polls /api/guerilla/active-stop and toggles body.on-route so the
+        # Dashboard tab shows an orange dot whenever any of today's stops is
+        # In Progress (Arrive tapped, no Visit/Skip yet). Cross-page so the
+        # state is visible from /lead, /companies, /events, etc.
+        'async function _refreshOnRouteBadge(){'
+        '  try {'
+        '    var r = await fetch("/api/guerilla/active-stop", {credentials:"same-origin"});'
+        '    if (!r.ok) return;'
+        '    var d = await r.json();'
+        '    document.body.classList.toggle("on-route", !!d);'
+        '  } catch(e) {}'
+        '}'
+        '_refreshOnRouteBadge();'
+        'setInterval(_refreshOnRouteBadge, 30000);'
+        'document.addEventListener("visibilitychange", function(){'
+        '  if (!document.hidden) _refreshOnRouteBadge();'
+        '});'
         # ── Push notifications: register sw, expose enableNotifications() ──
         'if ("serviceWorker" in navigator) {'
         '  navigator.serviceWorker.register("/sw.js").catch(function(e){console.warn("sw register failed",e);});'

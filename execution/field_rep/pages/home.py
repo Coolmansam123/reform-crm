@@ -8,6 +8,45 @@ from hub.shared import (
 from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
 
 
+_HOME_CSS = """
+<style>
+#home-root[data-state="A"] .only-b,
+#home-root[data-state="A"] .only-c { display:none }
+#home-root[data-state="B"] .only-a,
+#home-root[data-state="B"] .only-c { display:none }
+#home-root[data-state="C"] .only-a,
+#home-root[data-state="C"] .only-b { display:none }
+.qlog-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:18px }
+.qlog-btn { background:var(--card); border:1px solid var(--border); border-radius:10px;
+            padding:12px 6px; font-size:12px; font-weight:600; color:var(--text);
+            text-align:center; cursor:pointer; text-decoration:none;
+            display:flex; flex-direction:column; align-items:center; gap:4px;
+            font-family:inherit; min-height:64px; line-height:1.2 }
+.qlog-btn:active { background:rgba(0,74,198,.08) }
+.qlog-btn .material-symbols-outlined { font-size:22px; color:#004ac6 }
+.qlog-btn[data-active="1"] { background:#004ac6; border-color:#004ac6; color:#fff }
+.qlog-btn[data-active="1"] .material-symbols-outlined { color:#fff }
+.status-strip { font-size:12px; color:var(--text3); margin-bottom:14px;
+                display:flex; gap:6px; flex-wrap:wrap; align-items:center }
+.status-strip a { color:var(--text2); text-decoration:none; font-weight:600 }
+.status-strip .sep { color:var(--text4) }
+.hero-c { padding:18px 20px; color:#fff;
+          background:linear-gradient(135deg,#004ac6,#0066ee);
+          border-radius:12px; border:none }
+.hero-c .label-caps { color:rgba(255,255,255,.78) }
+.hero-c .h-actions { display:flex; gap:8px; margin-top:14px }
+.hero-c .h-actions button { flex:1; border:none; border-radius:8px;
+                            padding:11px 10px; font-size:13px; font-weight:700;
+                            cursor:pointer; font-family:inherit }
+.hero-c .h-primary { background:#fff; color:#004ac6 }
+.hero-c .h-secondary { background:rgba(255,255,255,.18); color:#fff }
+.recap-card { display:block; text-align:center; padding:10px; font-size:12px;
+              color:var(--text3); border:1px dashed var(--border);
+              border-radius:10px; text-decoration:none; background:transparent }
+</style>
+"""
+
+
 def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
     import datetime
     user = user or {}
@@ -15,60 +54,103 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
     today = datetime.date.today()
     day_str = f"{today.strftime('%A')}, {today.strftime('%B')} {today.day}"
     user_name = user.get('name', '')
+    user_email = (user.get('email', '') or '').strip().lower()
+
     body = (
         '<div class="mobile-hdr">'
         + '<div><div class="mobile-hdr-title">Reform</div>'
         + f'<div class="mobile-hdr-sub">{day_str}</div></div>'
         + '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         + '</div>'
+        + _HOME_CSS
         + '<div class="mobile-body">'
-        + f'<div style="margin-bottom:18px"><div style="font-size:22px;font-weight:700;color:var(--text);margin-bottom:2px">Hey, {first}</div>'
-        + '<div style="font-size:13px;color:var(--text3)">Ready to hit the field?</div></div>'
-        # 2x2 stat tile grid
-        + '<div class="label-caps" style="margin-bottom:8px">Daily Overview</div>'
-        + '<div class="stat-grid" style="margin-bottom:20px">'
-        +   '<a href="/routes" class="stat-tile" style="text-decoration:none;cursor:pointer">'
-        +     '<div class="stat-label">Today\'s stops</div><div class="stat-value" id="kpi-stops">—</div></a>'
-        +   '<a href="/todo" class="stat-tile" style="text-decoration:none;cursor:pointer">'
-        +     '<div class="stat-label">Overdue</div><div class="stat-value" id="kpi-overdue" style="color:#ba1a1a">—</div></a>'
-        +   '<a href="/lead" class="stat-tile" style="text-decoration:none;cursor:pointer">'
-        +     '<div class="stat-label">Leads (7d)</div><div class="stat-value" id="kpi-leads">—</div></a>'
-        +   '<a href="/routes" class="stat-tile" style="text-decoration:none;cursor:pointer">'
-        +     '<div class="stat-label">Active routes</div><div class="stat-value" id="kpi-routes">—</div></a>'
+        + '<div id="home-root" data-state="A">'
+        # ── Hero slot ──────────────────────────────────────────────────────
+        + '<div id="hero-slot" style="margin-bottom:18px">'
+        +   '<div class="only-a">'
+        +     f'<div style="font-size:22px;font-weight:700;color:var(--text);margin-bottom:2px">Hey, {first}</div>'
+        +     '<div style="font-size:13px;color:var(--text3)">Ready to hit the field?</div>'
+        +   '</div>'
+        +   '<div class="only-b" id="hero-b"></div>'
+        +   '<div class="only-c" id="hero-c"></div>'
         + '</div>'
-        # Today's route — featured card slot
-        + '<div class="label-caps" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
-        +   '<span class="material-symbols-outlined" style="font-size:14px">map</span>'
-        +   'Today\'s route<span id="today-ct" style="margin-left:auto;color:var(--text4);font-weight:600"></span></div>'
-        + '<div id="today-body" style="margin-bottom:20px">'
-        +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div></div>'
-        # Needs Attention
+        # ── Status strip (replaces 2x2 KPI grid) ───────────────────────────
+        + '<div class="status-strip">'
+        +   '<a href="/routes" id="ss-stops">— stops</a>'
+        +   '<span class="sep">·</span>'
+        +   '<a href="/todo"   id="ss-overdue">— overdue</a>'
+        +   '<span class="sep">·</span>'
+        +   '<a href="/lead"   id="ss-leads">— leads (7d)</a>'
+        + '</div>'
+        # ── Quick-log row ──────────────────────────────────────────────────
+        + '<div class="qlog-row">'
+        +   '<button class="qlog-btn" onclick="quickLog(\'lead\')">'
+        +     '<span class="material-symbols-outlined">person_add</span>'
+        +     '<span>Log Lead</span></button>'
+        +   '<button class="qlog-btn" id="qlog-visit-btn" onclick="quickLog(\'visit\')">'
+        +     '<span class="material-symbols-outlined">check_circle</span>'
+        +     '<span id="qlog-visit-lbl">Log Visit</span></button>'
+        +   '<button class="qlog-btn" onclick="quickLog(\'box\')">'
+        +     '<span class="material-symbols-outlined">inventory_2</span>'
+        +     '<span>Place Box</span></button>'
+        + '</div>'
+        # ── Worklist ───────────────────────────────────────────────────────
         + '<div class="label-caps" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
         +   '<span class="material-symbols-outlined" style="font-size:14px;color:#ba1a1a">priority_high</span>'
-        +   'Needs attention<span id="attn-ct" style="margin-left:auto;color:var(--text4);font-weight:600"></span></div>'
-        + '<div id="attn-body" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">'
-        +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div></div>'
-        # Massage Boxes
-        + '<div class="label-caps" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
-        +   '<span class="material-symbols-outlined" style="font-size:14px">inventory_2</span>'
-        +   'Massage boxes<span id="box-ct" style="margin-left:auto;color:var(--text4);font-weight:600"></span></div>'
-        + '<div id="box-body" style="display:flex;flex-direction:column;gap:10px">'
-        +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div></div>'
+        +   'Worklist<span id="wl-ct" style="margin-left:auto;color:var(--text4);font-weight:600"></span></div>'
+        + '<div id="wl-body" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">'
+        +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div>'
         + '</div>'
+        # ── Yesterday recap ────────────────────────────────────────────────
+        + '<div id="recap-slot"></div>'
+        # ── Place-box mini modal ───────────────────────────────────────────
+        + '<div id="pb-modal-bg" onclick="if(event.target===this)closePbModal()" '
+        + 'style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1100;'
+        + 'align-items:flex-start;justify-content:center;padding:30px 14px;overflow-y:auto">'
+        +   '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;'
+        +   'width:100%;max-width:420px;padding:18px 20px calc(20px + env(safe-area-inset-bottom))">'
+        +     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+        +       '<h3 style="margin:0;color:var(--text);font-size:16px;flex:1">Place Box</h3>'
+        +       '<button onclick="closePbModal()" style="background:none;border:none;color:var(--text3);'
+        +       'font-size:18px;cursor:pointer;padding:4px 8px">×</button>'
+        +     '</div>'
+        +     '<div id="pb-modal-body"></div>'
+        +     '<div id="pb-modal-msg" style="font-size:12px;min-height:14px;margin-top:8px"></div>'
+        +     '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">'
+        +       '<button onclick="closePbModal()" '
+        +       'style="padding:9px 16px;background:none;border:1px solid var(--border);color:var(--text2);'
+        +       'border-radius:6px;font-size:13px;cursor:pointer;font-family:inherit">Cancel</button>'
+        +       '<button id="pb-submit" onclick="submitPlaceBox()" '
+        +       'style="padding:9px 20px;background:#004ac6;border:none;color:#fff;border-radius:6px;'
+        +       'font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Place</button>'
+        +     '</div>'
+        +   '</div>'
+        + '</div>'
+        + '</div>'  # /home-root
+        + '</div>'  # /mobile-body
     )
-    user_email = (user.get('email', '') or '').strip().lower()
-    script_js = f"""
-const GFR_USER = {repr(user_name)};
-const USER_EMAIL = {repr(user_email)};
-const TOOL = {{ venuesT: {T_GOR_VENUES} }};
 
-async function loadHomeDashboard() {{
+    # JS: head with constants (interpolated), body with single braces.
+    js_head = (
+        f"const GFR_USER = {repr(user_name)};\n"
+        f"const USER_EMAIL = {repr(user_email)};\n"
+        f"const T_GOR_VENUES = {T_GOR_VENUES};\n"
+        f"const T_GOR_BOXES = {T_GOR_BOXES};\n"
+        f"const T_GOR_ROUTES = {T_GOR_ROUTES};\n"
+        f"const T_GOR_ROUTE_STOPS = {T_GOR_ROUTE_STOPS};\n"
+        f"const T_LEADS = {T_LEADS};\n"
+        f"const T_COMPANIES = {T_COMPANIES};\n"
+        f"const TOOL = {{ venuesT: {T_GOR_VENUES} }};\n"
+    )
+
+    js_body = r"""
+async function loadHomeDashboard() {
   const [routes, stops, leads, boxes, companies, overdueRaw] = await Promise.all([
-    fetchAll({T_GOR_ROUTES}),
-    fetchAll({T_GOR_ROUTE_STOPS}),
-    fetchAll({T_LEADS}),
-    fetchAll({T_GOR_BOXES}),
-    fetchAll({T_COMPANIES}),
+    fetchAll(T_GOR_ROUTES),
+    fetchAll(T_GOR_ROUTE_STOPS),
+    fetchAll(T_LEADS),
+    fetchAll(T_GOR_BOXES),
+    fetchAll(T_COMPANIES),
     fetch('/api/outreach/due').then(r => r.ok ? r.json() : []).catch(() => [])
   ]);
   // Active Partners have graduated out of the rep's outreach pipeline.
@@ -79,126 +161,375 @@ async function loadHomeDashboard() {{
   const myRoutes = routes.filter(r => (r['Assigned To']||'').trim().toLowerCase() === USER_EMAIL);
   const today = new Date().toISOString().slice(0, 10);
 
-  // Today's route
-  const todayRoute = myRoutes.find(r => {{
+  const todayRoute = myRoutes.find(r => {
     const s = sv(r['Status']) || 'Draft';
     return r['Date'] === today && (s === 'Active' || s === 'Draft');
-  }});
-  const activeRoutes = myRoutes.filter(r => {{
-    const s = sv(r['Status']) || 'Draft';
-    return s === 'Active' || s === 'Draft';
-  }}).length;
+  });
 
-  let todayStops = 0;
-  let todayBody = '<div class="card" style="color:var(--text3);text-align:center;font-size:13px;padding:18px">No route assigned today</div>';
-  if (todayRoute) {{
-    const ts = stops.filter(s => {{
-      const rl = s['Route']; return Array.isArray(rl) && rl.some(x => x.id === todayRoute.id);
-    }});
-    todayStops = ts.length;
-    const done = ts.filter(s => sv(s['Status']) === 'Visited' || sv(s['Status']) === 'Skipped').length;
-    const name = esc(todayRoute['Name'] || "Today's Route");
-    todayBody = `<a href="/route" class="card card-featured" style="display:block;text-decoration:none;color:inherit;cursor:pointer;padding:18px 20px">
-      <div class="label-caps" style="margin-bottom:6px">Active route</div>
-      <div style="font-size:18px;font-weight:700;margin-bottom:6px;line-height:1.3">${{name}}</div>
-      <div style="font-size:13px;opacity:.88">${{done}} of ${{ts.length}} stops done · Tap to continue &rarr;</div></a>`;
-    document.getElementById('today-ct').textContent = todayStops + ' stops';
-  }} else {{
-    document.getElementById('today-ct').textContent = '';
-  }}
-  document.getElementById('today-body').innerHTML = todayBody;
+  const todayStops = todayRoute
+    ? stops.filter(s => Array.isArray(s['Route']) && s['Route'].some(x => x.id === todayRoute.id))
+    : [];
+  const activeStop = todayStops.find(s => sv(s['Status']) === 'In Progress');
+  const visitedToday = todayStops.filter(s => {
+    const ss = sv(s['Status']);
+    return ss === 'Visited' || ss === 'Skipped';
+  }).length;
+  const PAGE_STATE = !todayRoute ? 'A' : activeStop ? 'C' : 'B';
 
-  // Leads in last 7 days
+  // Persist for action handlers (quickLog, markStop, etc.)
+  window._pageState = PAGE_STATE;
+  window._todayRoute = todayRoute || null;
+  window._todayRouteId = todayRoute ? todayRoute.id : null;
+  window._activeStop = activeStop || null;
+
+  let activeVenueId = null, activeCompanyId = null, activeVenueName = '';
+  if (activeStop) {
+    const biz = (activeStop['Business'] || [])[0] || {};
+    activeVenueId = biz.id || null;
+    activeVenueName = biz.value || '';
+    activeCompanyId = activeVenueId ? (venueCoMap[activeVenueId] || null) : null;
+  }
+  window._activeVenueId = activeVenueId;
+  window._activeCompanyId = activeCompanyId;
+  window._activeVenueName = activeVenueName;
+
+  document.getElementById('home-root').setAttribute('data-state', PAGE_STATE);
+
+  // ── Hero rendering ───────────────────────────────────────────────────
+  if (PAGE_STATE === 'C') {
+    const stopName = activeStop['Name'] || activeVenueName || 'Current Stop';
+    const arrivedRaw = activeStop['Arrived At'] || '';
+    const arrivedTime = arrivedRaw.length >= 16 ? arrivedRaw.slice(11, 16) : '';
+    const elapsedMin = computeElapsedMin(arrivedRaw);
+    document.getElementById('hero-c').innerHTML =
+      '<div class="card hero-c">' +
+        '<div class="label-caps">On site now</div>' +
+        '<div style="font-size:20px;font-weight:700;line-height:1.25;margin-top:4px">' + esc(stopName) + '</div>' +
+        '<div style="font-size:12px;opacity:.85;margin-top:4px">' +
+          'Arrived ' + esc(arrivedTime) + ' · <span id="hero-elapsed">' + elapsedMin + 'm</span> elapsed' +
+        '</div>' +
+        '<div class="h-actions">' +
+          '<button class="h-primary"   onclick="markStop(\'Visited\')">Mark Visited</button>' +
+          '<button class="h-secondary" onclick="markStop(\'Skipped\')">Skip</button>' +
+          '<button class="h-secondary" onclick="goStopNotes()">Notes</button>' +
+        '</div>' +
+      '</div>';
+  } else if (PAGE_STATE === 'B') {
+    const rname = esc(todayRoute['Name'] || "Today's Route");
+    const sct = todayStops.length;
+    document.getElementById('hero-b').innerHTML =
+      '<a href="/route" class="mobile-cta mobile-cta-orange" style="display:flex">' +
+        '<span class="mobile-cta-icon">🗺️</span>' +
+        '<div><div>Start Today\'s Route</div>' +
+          '<div class="mobile-cta-sub">' + rname + ' · ' + sct + ' stop' + (sct === 1 ? '' : 's') + '</div>' +
+        '</div>' +
+      '</a>';
+  }
+
+  // Quick-log Visit label/active flip when at a stop
+  const visitLbl = document.getElementById('qlog-visit-lbl');
+  const visitBtn = document.getElementById('qlog-visit-btn');
+  if (visitLbl) visitLbl.textContent = (PAGE_STATE === 'C') ? 'Mark Visited' : 'Log Visit';
+  if (visitBtn) visitBtn.setAttribute('data-active', PAGE_STATE === 'C' ? '1' : '0');
+
+  // ── Status strip ─────────────────────────────────────────────────────
   const sevenDaysAgo = new Date(Date.now() - 7*86400000).toISOString().slice(0, 10);
-  const recentLeads = leads.filter(l => {{
+  const recentLeads = leads.filter(l => {
     const d = (l['Created'] || l['Date'] || '').slice(0, 10);
     return d && d >= sevenDaysAgo;
-  }}).length;
+  }).length;
+  const overdueCount = Array.isArray(overdueResp) ? overdueResp.length : 0;
+  document.getElementById('ss-stops').textContent = todayRoute
+    ? (visitedToday + ' of ' + todayStops.length + ' stops')
+    : '0 stops today';
+  document.getElementById('ss-overdue').textContent = overdueCount + ' overdue';
+  document.getElementById('ss-leads').textContent = recentLeads + ' leads (7d)';
 
-  // KPI chips
-  document.getElementById('kpi-stops').textContent = todayStops;
-  document.getElementById('kpi-overdue').textContent = Array.isArray(overdueResp) ? overdueResp.length : 0;
-  document.getElementById('kpi-leads').textContent = recentLeads;
-  document.getElementById('kpi-routes').textContent = activeRoutes;
+  // ── Worklist (merged: overdue boxes + overdue companies + due-soon boxes) ─
+  // TODO: navigator.geolocation.getCurrentPosition -> /api/venues/near
+  // for proximity-aware "near me" hints. v2.
+  const wlItems = [];
 
-  // Needs Attention: top 5 overdue (cards with red left-border)
-  const topOverdue = (Array.isArray(overdueResp) ? overdueResp : []).slice(0, 5);
-  const overdueTotal = Array.isArray(overdueResp) ? overdueResp.length : 0;
-  document.getElementById('attn-ct').textContent = overdueTotal ? '· ' + overdueTotal + ' overdue' : '';
-  document.getElementById('attn-body').innerHTML = topOverdue.length ? topOverdue.map(c => `
-    <a href="/company/${{c.id}}" class="card card-urgent" style="display:flex;align-items:center;justify-content:space-between;gap:8px;text-decoration:none;color:inherit;cursor:pointer">
-      <span style="font-size:14px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${{esc(c.name)}}</span>
-      <span class="pill pill-overdue" style="white-space:nowrap">${{c.days_overdue}}d overdue</span>
-    </a>
-  `).join('') : '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">All caught up &check;</div>';
-
-  // Massage Boxes: all active, sorted by most overdue first
   const activeBoxes = boxes.filter(b => sv(b['Status']) === 'Active' && b['Date Placed']);
-  const rows = activeBoxes.map(b => {{
+  activeBoxes.forEach(b => {
     const placed = (b['Date Placed'] || '').slice(0, 10);
     const pickupDays = parseInt(b['Pickup Days']) || 14;
     const age = -daysUntil(placed);
     const overdue = age - pickupDays;
-    const biz = (b['Business'] || [])[0] || {{}};
-    return {{ boxId: b.id, venueId: biz.id, venueName: biz.value || 'Unknown venue',
-             placed, age, pickupDays, overdue }};
-  }});
-  rows.sort((a, b) => b.overdue - a.overdue);
-  window._boxRows = rows;
+    const biz = (b['Business'] || [])[0] || {};
+    let priority;
+    if (overdue > 0)         priority = 1000 + overdue;
+    else if (overdue === 0)  priority = 800;
+    else if (overdue >= -2)  priority = 700 + overdue;
+    else                     priority = 100 + (-overdue);
+    wlItems.push({
+      kind: 'box', priority,
+      name: biz.value || 'Unknown venue',
+      venueId: biz.id, boxId: b.id,
+      overdue, placed, pickupDays
+    });
+  });
 
-  document.getElementById('box-ct').textContent = rows.length ? '· ' + rows.length + ' active' : '';
-  const routeId = todayRoute ? todayRoute.id : null;
-  document.getElementById('box-body').innerHTML = rows.length ? rows.map((x, i) => {{
-    let pill, cardAccent = '';
-    if (x.overdue > 0)        {{ pill = '<span class="pill pill-overdue">' + x.overdue + 'd overdue</span>'; cardAccent = ' card-urgent'; }}
-    else if (x.overdue === 0) {{ pill = '<span class="pill pill-warning">due today</span>'; cardAccent = ' card-warning'; }}
-    else if (x.overdue >= -2) {{ pill = '<span class="pill pill-warning">due in ' + (-x.overdue) + 'd</span>'; cardAccent = ' card-warning'; }}
-    else                      {{ pill = '<span class="pill pill-success">' + (-x.overdue) + 'd left</span>'; }}
-    const btn = (routeId && x.venueId)
-      ? '<button id="box-add-' + i + '" onclick="addBoxToTodayRoute(' + i + ')" style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;min-height:36px;white-space:nowrap">+ Add</button>'
-      : '<span style="font-size:11px;color:var(--text4);white-space:nowrap">' + (routeId ? 'no venue' : 'no active route') + '</span>';
-    const companyId = venueCoMap[x.venueId];
-    const nameHtml = companyId
-      ? '<a href="/company/' + companyId + '" style="font-size:14px;font-weight:600;color:var(--text);text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.venueName) + '</a>'
-      : '<div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.venueName) + '</div>';
-    return '<div class="card' + cardAccent + '" style="display:flex;align-items:center;justify-content:space-between;gap:12px">'
-      + '<div style="flex:1;min-width:0">' + nameHtml
-      +   '<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pill + '<span style="font-size:11px;color:var(--text3)">placed ' + esc(fmt(x.placed)) + '</span></div>'
-      + '</div>' + btn + '</div>';
-  }}).join('') : '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">No active boxes</div>';
-  window._todayRouteId = routeId;
-}}
+  (Array.isArray(overdueResp) ? overdueResp : []).forEach(c => {
+    wlItems.push({
+      kind: 'company',
+      priority: 900 + (c.days_overdue || 0),
+      name: c.name || '(unnamed)',
+      companyId: c.id,
+      daysOverdue: c.days_overdue || 0
+    });
+  });
 
-async function addBoxToTodayRoute(idx) {{
+  wlItems.sort((a, b) => b.priority - a.priority);
+  const top8 = wlItems.slice(0, 8);
+
+  document.getElementById('wl-ct').textContent = wlItems.length ? '· ' + wlItems.length + ' items' : '';
+
+  if (!top8.length) {
+    document.getElementById('wl-body').innerHTML =
+      '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">All caught up ✓</div>';
+  } else {
+    const routeId = window._todayRouteId;
+    document.getElementById('wl-body').innerHTML = top8.map((x, i) => {
+      if (x.kind === 'company') {
+        return '<a href="/company/' + x.companyId + '" class="card card-urgent" ' +
+          'style="display:flex;align-items:center;justify-content:space-between;gap:8px;text-decoration:none;color:inherit">' +
+          '<span style="font-size:14px;font-weight:600;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(x.name) + '</span>' +
+          '<span class="pill pill-overdue" style="white-space:nowrap">' + x.daysOverdue + 'd overdue</span>' +
+        '</a>';
+      }
+      // box row
+      let pill, accent = '';
+      if (x.overdue > 0)        { pill = '<span class="pill pill-overdue">' + x.overdue + 'd overdue</span>'; accent = ' card-urgent'; }
+      else if (x.overdue === 0) { pill = '<span class="pill pill-warning">due today</span>'; accent = ' card-warning'; }
+      else if (x.overdue >= -2) { pill = '<span class="pill pill-warning">due in ' + (-x.overdue) + 'd</span>'; accent = ' card-warning'; }
+      else                      { pill = '<span class="pill pill-success">' + (-x.overdue) + 'd left</span>'; }
+      const btn = (routeId && x.venueId)
+        ? '<button id="wl-add-' + i + '" onclick="addBoxToTodayRoute(' + i + ')" ' +
+          'style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:8px 12px;' +
+          'font-size:12px;font-weight:600;cursor:pointer;min-height:36px;white-space:nowrap">+ Add</button>'
+        : '';
+      const companyId = venueCoMap[x.venueId];
+      const nameHtml = companyId
+        ? '<a href="/company/' + companyId + '" style="font-size:14px;font-weight:600;color:var(--text);' +
+          'text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.name) + '</a>'
+        : '<div style="font-size:14px;font-weight:600;color:var(--text);' +
+          'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(x.name) + '</div>';
+      return '<div class="card' + accent + '" style="display:flex;align-items:center;justify-content:space-between;gap:12px">' +
+        '<div style="flex:1;min-width:0">' + nameHtml +
+          '<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + pill +
+          '<span style="font-size:11px;color:var(--text3)">placed ' + esc(fmt(x.placed)) + '</span></div>' +
+        '</div>' + btn + '</div>';
+    }).join('');
+  }
+  // Re-index the box rows so addBoxToTodayRoute(idx) hits the right entry.
+  window._boxRows = top8.map(x => x.kind === 'box' ? x : null);
+
+  // ── Yesterday recap ──────────────────────────────────────────────────
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const yStops = stops.filter(s => {
+    const d = (s['Completed At'] || s['Visit Date'] || s['Updated'] || '').slice(0, 10);
+    return d === yesterday && sv(s['Status']) === 'Visited';
+  }).length;
+  const yLeads = leads.filter(l => {
+    const d = (l['Created'] || l['Date'] || '').slice(0, 10);
+    const owner = (l['Owner'] || '').toLowerCase();
+    return d === yesterday && (!owner || owner === USER_EMAIL);
+  }).length;
+  const recap = document.getElementById('recap-slot');
+  if (yStops || yLeads) {
+    recap.innerHTML =
+      '<a href="/todo" class="recap-card">Yesterday: ' +
+        yStops + ' visit'  + (yStops === 1 ? '' : 's') + ', ' +
+        yLeads + ' lead'   + (yLeads === 1 ? '' : 's') + ' logged' +
+      '</a>';
+  } else {
+    recap.innerHTML = '';
+  }
+}
+
+function computeElapsedMin(arrivedAt) {
+  if (!arrivedAt) return 0;
+  const t = Date.parse(arrivedAt.replace(' ', 'T'));
+  if (isNaN(t)) return 0;
+  return Math.max(0, Math.round((Date.now() - t) / 60000));
+}
+
+// ── Quick-log dispatcher ────────────────────────────────────────────────
+function quickLog(kind) {
+  const state = window._pageState || 'A';
+  if (kind === 'lead') {
+    // TODO: support /lead?new=1&company_id= prefill once lead.py reads the params
+    window.location.href = '/lead';
+    return;
+  }
+  if (kind === 'visit') {
+    if (state === 'C') {
+      markStop('Visited');
+    } else if (state === 'B') {
+      window.location.href = '/route';
+    } else {
+      // State A: ad-hoc Business Outreach Log
+      if (typeof openGFRForm === 'function') openGFRForm('Business Outreach Log');
+      else window.location.href = '/companies';
+    }
+    return;
+  }
+  if (kind === 'box') {
+    if (state === 'C' && window._activeVenueId) {
+      openPbModal({ venueId: window._activeVenueId, venueName: window._activeVenueName });
+    } else {
+      // State A/B: open the GFR chooser (covers Business Outreach Log w/ box-left field)
+      if (typeof openGFRChooser === 'function') openGFRChooser();
+      else window.location.href = '/companies';
+    }
+  }
+}
+
+// ── PATCH current stop status (Visited / Skipped) ──────────────────────
+async function markStop(status) {
+  const stop = window._activeStop;
+  if (!stop) { alert('No active stop'); return; }
+  try {
+    const r = await fetch('/api/guerilla/routes/stops/' + stop.id, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ status })
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      alert('Could not update stop: ' + (err.error || ('HTTP ' + r.status)));
+      return;
+    }
+    await loadHomeDashboard();
+  } catch (e) {
+    alert('Network error — try again');
+  }
+}
+
+function goStopNotes() {
+  // Notes have a full editor on /route. Punt there.
+  window.location.href = '/route';
+}
+
+// ── Place Box mini-modal ───────────────────────────────────────────────
+function openPbModal(opts) {
+  const o = opts || {};
+  const venueLocked = !!o.venueId;
+  const venueDisplay = esc(o.venueName || 'Active venue');
+  const body = document.getElementById('pb-modal-body');
+  body.innerHTML =
+    '<label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Venue' + (venueLocked ? '' : ' *') + '</label>' +
+    (venueLocked
+      ? '<div style="padding:9px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px;margin-bottom:12px">' +
+        venueDisplay + ' <span style="color:var(--text3);font-size:11px">(current stop)</span></div>'
+      : '<div style="padding:10px;background:var(--bg);border:1px dashed var(--border);color:var(--text3);border-radius:6px;font-size:12px;margin-bottom:12px;text-align:center">' +
+        'Open a company page and use its Place Box action.<br><a href="/companies" style="color:#004ac6;font-weight:600;text-decoration:none">→ Browse companies</a></div>'
+    ) +
+    '<label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Location (optional)</label>' +
+    '<input type="text" id="pb-loc" placeholder="e.g. by the front door" ' +
+    'style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px;margin-bottom:12px;font-family:inherit">' +
+    '<label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Pickup days</label>' +
+    '<input type="number" id="pb-days" value="14" min="1" max="60" ' +
+    'style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px;font-family:inherit">';
+  window._pbVenueId = o.venueId || null;
+  document.getElementById('pb-modal-msg').textContent = '';
+  const btn = document.getElementById('pb-submit');
+  btn.disabled = !venueLocked;
+  btn.style.opacity = venueLocked ? '1' : '.5';
+  document.getElementById('pb-modal-bg').style.display = 'flex';
+}
+function closePbModal() {
+  document.getElementById('pb-modal-bg').style.display = 'none';
+}
+async function submitPlaceBox() {
+  const msg = document.getElementById('pb-modal-msg');
+  const btn = document.getElementById('pb-submit');
+  msg.textContent = '';
+  const venueId = window._pbVenueId;
+  if (!venueId) {
+    msg.style.color = '#ef4444';
+    msg.textContent = 'No venue in scope.';
+    return;
+  }
+  const locEl = document.getElementById('pb-loc');
+  const daysEl = document.getElementById('pb-days');
+  const loc = locEl ? locEl.value.trim() : '';
+  const days = daysEl ? (parseInt(daysEl.value) || 14) : 14;
+  btn.disabled = true; btn.textContent = 'Placing…';
+  try {
+    const r = await fetch('/api/guerilla/boxes', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ venue_id: venueId, location: loc, pickup_days: days })
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      msg.style.color = '#ef4444';
+      msg.textContent = 'Failed: ' + (err.error || ('HTTP ' + r.status));
+      btn.disabled = false; btn.textContent = 'Place';
+      return;
+    }
+    msg.style.color = '#059669';
+    msg.textContent = 'Box placed ✓';
+    setTimeout(() => { closePbModal(); loadHomeDashboard(); }, 600);
+  } catch (e) {
+    msg.style.color = '#ef4444';
+    msg.textContent = 'Network error';
+    btn.disabled = false; btn.textContent = 'Place';
+  }
+}
+
+// ── Add a box-pickup stop to today's route (existing behavior, kept) ────
+async function addBoxToTodayRoute(idx) {
   const x = (window._boxRows || [])[idx];
   const routeId = window._todayRouteId;
   if (!x || !routeId || !x.venueId) return;
-  const btn = document.getElementById('box-add-' + idx);
-  if (btn) {{ btn.disabled = true; btn.textContent = '…'; }}
-  try {{
-    const r = await fetch('/api/guerilla/routes/' + routeId + '/stops', {{
+  const btn = document.getElementById('wl-add-' + idx);
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const r = await fetch('/api/guerilla/routes/' + routeId + '/stops', {
       method: 'POST',
-      headers: {{'Content-Type': 'application/json'}},
-      body: JSON.stringify({{venue_id: x.venueId, name: 'Box pickup: ' + x.venueName}})
-    }});
-    if (!r.ok) {{
-      const err = await r.json().catch(() => ({{}}));
-      if (btn) {{ btn.disabled = false; btn.textContent = '+ Add'; }}
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ venue_id: x.venueId, name: 'Box pickup: ' + x.name })
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      if (btn) { btn.disabled = false; btn.textContent = '+ Add'; }
       alert('Could not add: ' + (err.error || r.status));
       return;
-    }}
-    if (btn) {{
-      btn.style.background = '#059669';
-      btn.textContent = '✓ Added';
-    }}
-  }} catch (e) {{
-    if (btn) {{ btn.disabled = false; btn.textContent = '+ Add'; }}
+    }
+    if (btn) { btn.style.background = '#059669'; btn.textContent = '✓'; }
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '+ Add'; }
     alert('Network error — try again');
-  }}
-}}
+  }
+}
 
-loadHomeDashboard().catch(err => console.error('Dashboard load failed:', err));
+// ── Live elapsed-time tick for the State C hero ────────────────────────
+setInterval(() => {
+  const stop = window._activeStop;
+  const el = document.getElementById('hero-elapsed');
+  if (!stop || !el) return;
+  el.textContent = computeElapsedMin(stop['Arrived At'] || '') + 'm';
+}, 30000);
+
+// ── Initial load + freshness loop ──────────────────────────────────────
+function _scheduleNextHomeLoad() {
+  setTimeout(() => {
+    loadHomeDashboard().then(_scheduleNextHomeLoad).catch(() => _scheduleNextHomeLoad());
+  }, 30000);
+}
+loadHomeDashboard()
+  .then(_scheduleNextHomeLoad)
+  .catch(err => { console.error('Dashboard load failed:', err); _scheduleNextHomeLoad(); });
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) loadHomeDashboard();
+});
 """
+
+    script_js = js_head + js_body
     return _mobile_page('m_home', 'Home', body, script_js, br, bt, user=user,
                          extra_html=GFR_EXTRA_HTML, extra_js=GFR_EXTRA_JS)
 
@@ -217,21 +548,21 @@ def _mobile_routes_dashboard_page(br: str, bt: str, user: dict = None) -> str:
         '<div class="mobile-body">'
         # Today's route CTA
         '<a href="/route" id="today-cta" class="mobile-cta mobile-cta-orange" style="margin-bottom:16px;display:none">'
-        '<span class="mobile-cta-icon">\U0001f5fa\ufe0f</span>'
+        '<span class="mobile-cta-icon">\U0001f5fa️</span>'
         '<div><div id="today-cta-title">Start Today\'s Route</div>'
-        '<div class="mobile-cta-sub" id="today-cta-sub">Loading\u2026</div></div>'
+        '<div class="mobile-cta-sub" id="today-cta-sub">Loading…</div></div>'
         '</a>'
         # Stat cards
         '<div id="m-stats" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'
-        '<div class="loading">Loading\u2026</div></div>'
+        '<div class="loading">Loading…</div></div>'
         # Route list
-        '<div id="m-route-list"><div class="loading">Loading\u2026</div></div>'
+        '<div id="m-route-list"><div class="loading">Loading…</div></div>'
         # Past routes toggle
         '<div id="m-past-wrapper" style="display:none">'
         '<button id="m-past-toggle" onclick="togglePast()" '
         'style="width:100%;padding:10px;border:1px solid var(--border);background:var(--card);'
         'color:var(--text2);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px">'
-        '\u25b6 Show past routes</button>'
+        '▶ Show past routes</button>'
         '<div id="m-past-routes" style="display:none"></div>'
         '</div>'
         '</div>'
@@ -342,7 +673,7 @@ async function load() {{
     h += '<div style="font-size:14px;font-weight:700">'+esc(row['Name']||'(unnamed)')+'</div>';
     h += '<span style="font-size:10px;background:'+sc+'20;color:'+sc+';border-radius:4px;padding:2px 7px;font-weight:600">'+esc(status)+'</span>';
     h += '</div>';
-    h += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+fmt(row['Date']||'')+' \u2022 '+total+' stops</div>';
+    h += '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">'+fmt(row['Date']||'')+' • '+total+' stops</div>';
     // Stats
     h += '<div style="display:flex;gap:10px;font-size:11px;font-weight:600;margin-bottom:6px">';
     if(v) h += '<span style="color:#059669">'+v+' visited</span>';
@@ -379,10 +710,10 @@ function togglePast() {{
   var btn = document.getElementById('m-past-toggle');
   if (el.style.display === 'none') {{
     el.style.display = 'block';
-    btn.innerHTML = '\u25bc Hide past routes';
+    btn.innerHTML = '▼ Hide past routes';
   }} else {{
     el.style.display = 'none';
-    btn.innerHTML = '\u25b6 Show past routes';
+    btn.innerHTML = '▶ Show past routes';
   }}
 }}
 

@@ -511,6 +511,15 @@ async def update_route_stop(request: Request, stop_id: int):
     return resp
 
 
+@router.get("/api/guerilla/active-stop")
+async def get_active_stop(request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    br, bt = _env()
+    return await guerilla_api.get_active_stop(request, br, bt, session, _cached_rows)
+
+
 @router.post("/api/guerilla/routes")
 async def gorilla_routes_create(request: Request):
     session = await get_session(request)

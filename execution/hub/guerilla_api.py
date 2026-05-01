@@ -830,6 +830,61 @@ async def update_route_stop(request: Request, br: str, bt: str, user: dict,
     return JSONResponse({"ok": True})
 
 
+async def get_active_stop(request: Request, br: str, bt: str, user: dict,
+                          cached_rows: CachedRowsFn) -> JSONResponse:
+    """The rep's currently-active stop, or null.
+
+    A stop is "active" when its Status == 'In Progress' (i.e., Arrive tapped
+    but no Visit/Skip yet) on a route dated today and Assigned To this rep.
+    Used by the home page hero card and the mobile bottom-nav On-Route badge.
+    """
+    if not _has_hub_access(user, "guerilla"):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    if not T_GOR_ROUTES or not T_GOR_ROUTE_STOPS:
+        return JSONResponse(None)
+    user_email = (user.get("email", "") or "").strip().lower()
+    today = _date.today().isoformat()
+    routes = await cached_rows(T_GOR_ROUTES)
+    today_route = None
+    for r in routes:
+        if (r.get("Date") or "")[:10] != today:
+            continue
+        if (r.get("Assigned To") or "").strip().lower() != user_email:
+            continue
+        st = r.get("Status")
+        st_val = st.get("value") if isinstance(st, dict) else st
+        if st_val in ("Active", "Draft"):
+            today_route = r
+            break
+    if not today_route:
+        return JSONResponse(None)
+    stops = await cached_rows(T_GOR_ROUTE_STOPS)
+    for s in stops:
+        route_links = s.get("Route") or []
+        if not any(isinstance(x, dict) and x.get("id") == today_route["id"]
+                   for x in route_links):
+            continue
+        ss = s.get("Status")
+        ss_val = ss.get("value") if isinstance(ss, dict) else ss
+        if ss_val != "In Progress":
+            continue
+        biz_links = s.get("Business") or []
+        biz = biz_links[0] if biz_links else {}
+        venue_id = biz.get("id") if isinstance(biz, dict) else None
+        venue_name = biz.get("value") if isinstance(biz, dict) else ""
+        stop_name = s.get("Name") or venue_name or "Stop"
+        return JSONResponse({
+            "route_id":   today_route["id"],
+            "route_name": today_route.get("Name") or "",
+            "stop_id":    s["id"],
+            "stop_name":  stop_name,
+            "venue_id":   venue_id,
+            "venue_name": venue_name,
+            "arrived_at": s.get("Arrived At") or "",
+        })
+    return JSONResponse(None)
+
+
 async def gorilla_routes_create(request: Request, br: str, bt: str,
                                 user: dict) -> JSONResponse:
     if not _is_admin(user):
