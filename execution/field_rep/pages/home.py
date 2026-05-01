@@ -1,5 +1,7 @@
 """Home dashboard + My Routes dashboard."""
 
+import os
+
 from hub.shared import (
     _mobile_page,
     T_GOR_VENUES, T_GOR_BOXES, T_GOR_ROUTES, T_GOR_ROUTE_STOPS, T_LEADS,
@@ -16,12 +18,12 @@ _HOME_CSS = """
 #home-root[data-state="B"] .only-c { display:none }
 #home-root[data-state="C"] .only-a,
 #home-root[data-state="C"] .only-b { display:none }
-.qlog-row { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:18px }
+.qlog-row { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:18px }
 .qlog-btn { background:var(--card); border:1px solid var(--border); border-radius:10px;
-            padding:10px 4px; font-size:11px; font-weight:600; color:var(--text);
+            padding:12px 6px; font-size:12px; font-weight:600; color:var(--text);
             text-align:center; cursor:pointer; text-decoration:none;
-            display:flex; flex-direction:column; align-items:center; gap:3px;
-            font-family:inherit; min-height:62px; line-height:1.2 }
+            display:flex; flex-direction:column; align-items:center; gap:4px;
+            font-family:inherit; min-height:64px; line-height:1.2 }
 .qlog-btn:active { background:rgba(0,74,198,.08) }
 .qlog-btn .material-symbols-outlined { font-size:22px; color:#004ac6 }
 .qlog-btn[data-active="1"] { background:#004ac6; border-color:#004ac6; color:#fff }
@@ -43,12 +45,35 @@ _HOME_CSS = """
 .recap-card { display:block; text-align:center; padding:10px; font-size:12px;
               color:var(--text3); border:1px dashed var(--border);
               border-radius:10px; text-decoration:none; background:transparent }
+
+/* ── Map card ───────────────────────────────────────────────────────── */
+#home-map-card { margin-bottom:18px; border:1px solid var(--border);
+                 border-radius:12px; overflow:hidden; background:var(--card) }
+#hm-chips { display:flex; gap:6px; padding:10px;
+            overflow-x:auto; -webkit-overflow-scrolling:touch;
+            scrollbar-width:none }
+#hm-chips::-webkit-scrollbar { display:none }
+#hm-map { width:100%; height:240px; background:var(--bg); position:relative }
+#hm-map-empty { position:absolute; inset:0; display:flex;
+                align-items:center; justify-content:center;
+                color:var(--text3); font-size:13px; pointer-events:none }
+#hm-legend { font-size:11px; color:var(--text3);
+             padding:6px 10px; border-top:1px solid var(--border);
+             min-height:14px }
+
+/* Desktop: cap content column width and bump map height. */
+@media (min-width: 720px) {
+  .mobile-body { max-width:520px; margin-left:auto; margin-right:auto }
+  #hm-map { height:300px }
+}
 </style>
 """
 
 
 def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
     import datetime
+    gk      = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    gmap_id = os.environ.get("GOOGLE_MAPS_MAP_ID", "")
     user = user or {}
     first = (user.get('name', 'there') or 'there').split()[0]
     today = datetime.date.today()
@@ -74,7 +99,13 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         +   '<div class="only-b" id="hero-b"></div>'
         +   '<div class="only-c" id="hero-c"></div>'
         + '</div>'
-        # ── Status strip (replaces 2x2 KPI grid) ───────────────────────────
+        # ── Map card (anchor) ──────────────────────────────────────────────
+        + '<div id="home-map-card">'
+        +   '<div id="hm-chips"></div>'
+        +   '<div id="hm-map"><div id="hm-map-empty">Loading map…</div></div>'
+        +   '<div id="hm-legend"></div>'
+        + '</div>'
+        # ── Status strip ───────────────────────────────────────────────────
         + '<div class="status-strip">'
         +   '<a href="/routes" id="ss-stops">— stops</a>'
         +   '<span class="sep">·</span>'
@@ -82,7 +113,7 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         +   '<span class="sep">·</span>'
         +   '<a href="/lead"   id="ss-leads">— leads (7d)</a>'
         + '</div>'
-        # ── Quick-log row ──────────────────────────────────────────────────
+        # ── Quick-log row (3 buttons: Lead / Visit / Event) ────────────────
         + '<div class="qlog-row">'
         +   '<button class="qlog-btn" onclick="quickLog(\'lead\')">'
         +     '<span class="material-symbols-outlined">person_add</span>'
@@ -90,9 +121,9 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         +   '<button class="qlog-btn" id="qlog-visit-btn" onclick="quickLog(\'visit\')">'
         +     '<span class="material-symbols-outlined">check_circle</span>'
         +     '<span id="qlog-visit-lbl">Log Visit</span></button>'
-        +   '<button class="qlog-btn" onclick="quickLog(\'box\')">'
-        +     '<span class="material-symbols-outlined">inventory_2</span>'
-        +     '<span>Place Box</span></button>'
+        +   '<button class="qlog-btn" onclick="quickLog(\'event\')">'
+        +     '<span class="material-symbols-outlined">event</span>'
+        +     '<span>Log Event</span></button>'
         + '</div>'
         # ── Worklist ───────────────────────────────────────────────────────
         + '<div class="label-caps" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
@@ -103,29 +134,6 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         + '</div>'
         # ── Yesterday recap ────────────────────────────────────────────────
         + '<div id="recap-slot"></div>'
-        # ── Place-box mini modal ───────────────────────────────────────────
-        + '<div id="pb-modal-bg" onclick="if(event.target===this)closePbModal()" '
-        + 'style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1100;'
-        + 'align-items:flex-start;justify-content:center;padding:30px 14px;overflow-y:auto">'
-        +   '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;'
-        +   'width:100%;max-width:420px;padding:18px 20px calc(20px + env(safe-area-inset-bottom))">'
-        +     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
-        +       '<h3 style="margin:0;color:var(--text);font-size:16px;flex:1">Place Box</h3>'
-        +       '<button onclick="closePbModal()" style="background:none;border:none;color:var(--text3);'
-        +       'font-size:18px;cursor:pointer;padding:4px 8px">×</button>'
-        +     '</div>'
-        +     '<div id="pb-modal-body"></div>'
-        +     '<div id="pb-modal-msg" style="font-size:12px;min-height:14px;margin-top:8px"></div>'
-        +     '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">'
-        +       '<button onclick="closePbModal()" '
-        +       'style="padding:9px 16px;background:none;border:1px solid var(--border);color:var(--text2);'
-        +       'border-radius:6px;font-size:13px;cursor:pointer;font-family:inherit">Cancel</button>'
-        +       '<button id="pb-submit" onclick="submitPlaceBox()" '
-        +       'style="padding:9px 20px;background:#004ac6;border:none;color:#fff;border-radius:6px;'
-        +       'font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Place</button>'
-        +     '</div>'
-        +   '</div>'
-        + '</div>'
         + '</div>'  # /home-root
         + '</div>'  # /mobile-body
     )
@@ -141,22 +149,290 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         f"const T_LEADS = {T_LEADS};\n"
         f"const T_COMPANIES = {T_COMPANIES};\n"
         f"const TOOL = {{ venuesT: {T_GOR_VENUES} }};\n"
+        f"const HM_GK = {repr(gk)};\n"
+        f"const HM_MAP_ID = {repr(gmap_id)};\n"
     )
 
     js_body = r"""
+// ═══════════════════════════════════════════════════════════════════════
+// Home map — embedded interactive map with toggleable layers.
+// Pin factories ported inline from execution/field_rep/pages/map.py
+// (TODO v2: extract to a shared `_map_helpers.py` so both pages reuse).
+// ═══════════════════════════════════════════════════════════════════════
+const _HM_STATUS_COLORS = {
+  'Pending':     '#9e9e9e',
+  'In Progress': '#fbbc04',
+  'Visited':     '#34a853',
+  'Skipped':     '#f97316',
+  'Not Reached': '#ef4444',
+};
+const _HM_BOX_COLORS = { action:'#ef4444', warning:'#f59e0b', ok:'#059669' };
+const _HM_OVERDUE_COLOR = '#ef4444';
+
+const HM_LAYERS = ['route','boxes','visits','overdue'];
+const HM_CHIP_LABELS = {
+  route:   { label: 'Route',   dot: '#004ac6' },
+  boxes:   { label: 'Boxes',   dot: '#059669' },
+  visits:  { label: 'Visits',  dot: '#8b5cf6' },
+  overdue: { label: 'Overdue', dot: '#ef4444' },
+};
+// `overdue` is OFF by default in every state per direction —
+// it's more for admins than reps.
+const HM_DEFAULTS = {
+  A: { route:0, boxes:1, visits:1, overdue:0 },
+  B: { route:1, boxes:1, visits:0, overdue:0 },
+  C: { route:1, boxes:0, visits:0, overdue:0 },
+};
+
+let _hmMap            = null;
+let _hmIW             = null;  // shared InfoWindow
+let _hmMarkers        = {};    // 'layer:id' -> AdvancedMarkerElement
+let _hmLayerData      = { route:[], boxes:[], visits:[], overdue:[] };
+let _hmLayerOn        = null;  // {route:1, boxes:1, ...}
+let _hmInitialized    = false;
+let _hmLastPanStopId  = null;  // auto-pan latch — pans once per arrival
+
+function _hmLoadLayerPrefs() {
+  try {
+    const raw = localStorage.getItem('hm.layers.' + USER_EMAIL);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
+}
+function _hmSaveLayerPrefs(prefs) {
+  try { localStorage.setItem('hm.layers.' + USER_EMAIL, JSON.stringify(prefs)); } catch (e) {}
+}
+
+// ── Pin factories ──────────────────────────────────────────────────────
+function _hmFallbackDot(color) {
+  const el = document.createElement('div');
+  el.style.cssText = 'width:12px;height:12px;border-radius:50%;background:' + color
+    + ';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35);box-sizing:content-box';
+  return el;
+}
+function _hmRoutePin(stopOrder, status) {
+  const fill = _HM_STATUS_COLORS[status] || '#4285f4';
+  if (!(google.maps.marker && google.maps.marker.PinElement)) return _hmFallbackDot(fill);
+  const pin = new google.maps.marker.PinElement({
+    background: fill, borderColor: '#fff',
+    glyph: String(stopOrder || ''), glyphColor: '#fff', scale: 1.15,
+  });
+  return pin.element;
+}
+function _hmBoxPin(level) {
+  const color = _HM_BOX_COLORS[level] || _HM_BOX_COLORS.ok;
+  if (!(google.maps.marker && google.maps.marker.PinElement)) return _hmFallbackDot(color);
+  const pin = new google.maps.marker.PinElement({
+    background: color, borderColor: '#fff',
+    glyphColor: '#fff', glyph: '', scale: 1.0,
+  });
+  return pin.element;
+}
+function _hmVisitDot() {
+  // Custom HTML — recedes visually so route + boxes stay primary.
+  const el = document.createElement('div');
+  el.style.cssText = 'width:10px;height:10px;border-radius:50%;background:#8b5cf6'
+    + ';border:2px solid #fff;opacity:.6;box-shadow:0 1px 2px rgba(0,0,0,.3)'
+    + ';box-sizing:content-box';
+  return el;
+}
+function _hmOverduePin() {
+  if (!(google.maps.marker && google.maps.marker.PinElement)) return _hmFallbackDot(_HM_OVERDUE_COLOR);
+  const pin = new google.maps.marker.PinElement({
+    background: _HM_OVERDUE_COLOR, borderColor: '#7f1d1d',
+    glyph: '!', glyphColor: '#fff', scale: 1.1,
+  });
+  return pin.element;
+}
+
+// ── Map init (lazy, idempotent) ────────────────────────────────────────
+function hmInit() {
+  if (_hmInitialized) return;
+  if (!HM_GK) {
+    const card = document.getElementById('home-map-card');
+    if (card) card.style.display = 'none';
+    console.warn('GOOGLE_MAPS_API_KEY not set — home map hidden.');
+    return;
+  }
+  if (!HM_MAP_ID) {
+    console.warn('GOOGLE_MAPS_MAP_ID not set — AdvancedMarkers may not render.');
+  }
+  _hmInitialized = true;
+  if (window.google && window.google.maps && window.google.maps.marker) {
+    _hmReady();
+  } else {
+    window._homeMapReadyCb = _hmReady;
+    const s = document.createElement('script');
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + HM_GK
+          + '&v=weekly&libraries=marker&callback=_homeMapReadyCb';
+    s.async = true;
+    s.onerror = () => {
+      const card = document.getElementById('home-map-card');
+      if (card) card.style.display = 'none';
+    };
+    document.head.appendChild(s);
+  }
+}
+
+function _hmReady() {
+  const el = document.getElementById('hm-map');
+  if (!el) return;
+  const opts = {
+    center: { lat: 33.9478, lng: -118.1335 },  // Reform office (Downey)
+    zoom: 11,
+    mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
+    clickableIcons: false,
+  };
+  if (HM_MAP_ID) opts.mapId = HM_MAP_ID;
+  _hmMap = new google.maps.Map(el, opts);
+  _hmIW = new google.maps.InfoWindow();
+  // Hide the loading placeholder
+  const loading = document.getElementById('hm-map-empty');
+  if (loading) loading.style.display = 'none';
+  // Office star marker (always visible)
+  if (google.maps.marker && google.maps.marker.PinElement) {
+    const officePin = new google.maps.marker.PinElement({
+      background: '#1e3a5f', borderColor: '#0f1e35',
+      glyphColor: '#fff', glyph: '★', scale: 1.3,
+    });
+    new google.maps.marker.AdvancedMarkerElement({
+      position: opts.center, map: _hmMap,
+      title: 'Reform Chiropractic',
+      content: officePin.element,
+    });
+  }
+  hmRefreshLayers();
+}
+
+// ── Chip rendering / toggle ────────────────────────────────────────────
+function hmRenderChips() {
+  const wrap = document.getElementById('hm-chips');
+  if (!wrap || !_hmLayerOn) return;
+  wrap.innerHTML = HM_LAYERS.map(layer => {
+    const on = !!_hmLayerOn[layer];
+    const meta = HM_CHIP_LABELS[layer];
+    const ct = (_hmLayerData[layer] || []).length;
+    const borderColor = on ? meta.dot : 'var(--border)';
+    const bg = on ? (meta.dot + '1a') : 'var(--card)';
+    const color = on ? meta.dot : 'var(--text2)';
+    return '<button data-layer="' + layer + '" data-on="' + (on ? 1 : 0) + '"'
+      + ' onclick="hmToggleLayer(\'' + layer + '\')"'
+      + ' style="display:inline-flex;align-items:center;gap:6px;'
+      + 'padding:8px 12px;border-radius:18px;'
+      + 'border:1px solid ' + borderColor + ';background:' + bg + ';color:' + color + ';'
+      + 'font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;'
+      + 'min-width:88px;min-height:36px;white-space:nowrap;flex-shrink:0">'
+      + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + meta.dot + '"></span>'
+      + '<span>' + meta.label + '</span>'
+      + '<span style="opacity:.7;font-weight:500">' + ct + '</span>'
+      + '</button>';
+  }).join('');
+}
+
+function hmToggleLayer(layer) {
+  if (!_hmLayerOn) return;
+  _hmLayerOn[layer] = _hmLayerOn[layer] ? 0 : 1;
+  _hmSaveLayerPrefs(_hmLayerOn);
+  hmRefreshLayers();
+}
+
+// ── Layer rendering ────────────────────────────────────────────────────
+function hmRefreshLayers() {
+  if (!_hmMap) return;
+  // Drop existing layer markers
+  Object.values(_hmMarkers).forEach(m => { m.map = null; });
+  _hmMarkers = {};
+  // Stack order (drawn first → behind): overdue, boxes, visits, route
+  const order = ['overdue','boxes','visits','route'];
+  order.forEach(layer => {
+    if (!_hmLayerOn || !_hmLayerOn[layer]) return;
+    const items = _hmLayerData[layer] || [];
+    items.forEach(item => {
+      if (!item || !item.lat || !item.lng) return;
+      if (!(google.maps.marker && google.maps.marker.AdvancedMarkerElement)) return;
+      let content;
+      if      (layer === 'route')   content = _hmRoutePin(item.order, item.status);
+      else if (layer === 'boxes')   content = _hmBoxPin(item.level);
+      else if (layer === 'visits')  content = _hmVisitDot();
+      else if (layer === 'overdue') content = _hmOverduePin();
+      const m = new google.maps.marker.AdvancedMarkerElement({
+        position: { lat: item.lat, lng: item.lng },
+        map: _hmMap, title: item.name || '',
+        content,
+      });
+      m.addListener('gmpClick', () => _hmOpenIW(m, layer, item));
+      _hmMarkers[layer + ':' + (item.id != null ? item.id : Math.random())] = m;
+    });
+  });
+  // Legend
+  const legend = document.getElementById('hm-legend');
+  if (legend) {
+    const parts = HM_LAYERS.filter(l => _hmLayerOn[l])
+      .map(l => (_hmLayerData[l] || []).length + ' ' + l);
+    legend.textContent = parts.length
+      ? parts.join(' · ')
+      : 'No layers selected — tap a chip above';
+  }
+  // Re-render chips so the count badges reflect current data
+  hmRenderChips();
+}
+
+function _hmOpenIW(marker, layer, item) {
+  if (!_hmIW) return;
+  let subtitle = '';
+  let nav = item.nav || '/companies';
+  if      (layer === 'route')   subtitle = 'Stop ' + (item.order || '?') + ' · ' + (item.status || 'Pending');
+  else if (layer === 'boxes')   subtitle = (item.age != null ? item.age + 'd placed' : '')
+                                         + (item.level && item.level !== 'ok' ? ' · ' + item.level : '');
+  else if (layer === 'visits')  subtitle = 'Visited ' + (item.date || '');
+  else if (layer === 'overdue') subtitle = (item.daysOverdue || 0) + 'd overdue';
+  const html = '<div style="font-family:system-ui;max-width:220px">'
+    + '<div style="font-weight:700;font-size:13px;margin-bottom:4px">' + esc(item.name || '') + '</div>'
+    + '<div style="font-size:11px;color:#666;margin-bottom:6px">' + esc(subtitle) + '</div>'
+    + '<a href="' + esc(nav) + '" style="font-size:12px;color:#004ac6;font-weight:600;text-decoration:none">Open →</a>'
+    + '</div>';
+  _hmIW.setContent(html);
+  _hmIW.open({ map: _hmMap, anchor: marker });
+}
+
+// Auto-pan: pans to active stop ONCE per arrival; if rep manually pans
+// after, subsequent loadHomeDashboard refreshes won't fight them.
+function hmAutoPan(activeStop, lat, lng) {
+  if (!activeStop) {
+    _hmLastPanStopId = null;
+    return;
+  }
+  if (_hmLastPanStopId === activeStop.id) return;
+  if (!lat || !lng || !_hmMap) return;
+  _hmMap.panTo({ lat: parseFloat(lat), lng: parseFloat(lng) });
+  _hmMap.setZoom(16);
+  _hmLastPanStopId = activeStop.id;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Home dashboard — main loader.
+// ═══════════════════════════════════════════════════════════════════════
 async function loadHomeDashboard() {
-  const [routes, stops, leads, boxes, companies, overdueRaw] = await Promise.all([
+  const [routes, stops, leads, boxes, companies, venues, overdueRaw] = await Promise.all([
     fetchAll(T_GOR_ROUTES),
     fetchAll(T_GOR_ROUTE_STOPS),
     fetchAll(T_LEADS),
     fetchAll(T_GOR_BOXES),
     fetchAll(T_COMPANIES),
+    fetchAll(T_GOR_VENUES),
     fetch('/api/outreach/due').then(r => r.ok ? r.json() : []).catch(() => [])
   ]);
   // Active Partners have graduated out of the rep's outreach pipeline.
   const overdueResp = (Array.isArray(overdueRaw) ? overdueRaw : [])
     .filter(c => c.status !== 'Active Partner');
   const venueCoMap = buildVenueCompanyMap(companies);
+  // Venue lat/lng lookup for layers that only carry linked Business[] IDs.
+  const venueLL = {};
+  venues.forEach(v => {
+    const lat = parseFloat(v['Latitude']);
+    const lng = parseFloat(v['Longitude']);
+    if (lat && lng) venueLL[v.id] = { lat, lng, name: v['Name'] || '' };
+  });
 
   const myRoutes = routes.filter(r => (r['Assigned To']||'').trim().toLowerCase() === USER_EMAIL);
   const today = new Date().toISOString().slice(0, 10);
@@ -245,11 +521,107 @@ async function loadHomeDashboard() {
   document.getElementById('ss-overdue').textContent = overdueCount + ' overdue';
   document.getElementById('ss-leads').textContent = recentLeads + ' leads (7d)';
 
-  // ── Worklist (merged: overdue boxes + overdue companies + due-soon boxes) ─
-  // TODO: navigator.geolocation.getCurrentPosition -> /api/venues/near
-  // for proximity-aware "near me" hints. v2.
-  const wlItems = [];
+  // ── Build map layer data ─────────────────────────────────────────────
+  // Route layer: today's stops, ordered, with venue lat/lng fallback
+  const routeLayer = todayStops.map(s => {
+    const biz = (s['Business'] || [])[0] || {};
+    const ll = (s['Check-In Lat'] && s['Check-In Lng'])
+      ? { lat: parseFloat(s['Check-In Lat']), lng: parseFloat(s['Check-In Lng']) }
+      : (biz.id && venueLL[biz.id]) || {};
+    return {
+      id:     s.id,
+      lat:    ll.lat,
+      lng:    ll.lng,
+      name:   s['Name'] || biz.value || 'Stop',
+      order:  s['Stop Order'] || '',
+      status: sv(s['Status']) || 'Pending',
+      nav:    '/route',
+    };
+  }).filter(x => x.lat && x.lng).sort((a, b) => (a.order || 0) - (b.order || 0));
 
+  // Boxes layer: active boxes with overdue alert level
+  const boxesLayer = boxes.filter(b => sv(b['Status']) === 'Active' && b['Date Placed']).map(b => {
+    const placed = (b['Date Placed'] || '').slice(0, 10);
+    const pickupDays = parseInt(b['Pickup Days']) || 14;
+    const age = -daysUntil(placed);
+    const overdue = age - pickupDays;
+    const level = overdue > 0 ? 'action' : (overdue >= -2 ? 'warning' : 'ok');
+    const biz = (b['Business'] || [])[0] || {};
+    const ll = (biz.id && venueLL[biz.id]) || {};
+    const companyId = venueCoMap[biz.id];
+    return {
+      id:    b.id,
+      lat:   ll.lat,
+      lng:   ll.lng,
+      name:  biz.value || ll.name || 'Unknown venue',
+      age, level, placed,
+      nav:   companyId ? ('/company/' + companyId) : '/companies',
+    };
+  }).filter(x => x.lat && x.lng);
+
+  // Recent visits layer: last 7 days of Visited stops, plotted at venue lat/lng
+  const visitsLayer = stops.filter(s => {
+    if (sv(s['Status']) !== 'Visited') return false;
+    const d = (s['Completed At'] || s['Visit Date'] || s['Updated'] || '').slice(0, 10);
+    return d && d >= sevenDaysAgo;
+  }).map(s => {
+    const biz = (s['Business'] || [])[0] || {};
+    const ll = (s['Check-In Lat'] && s['Check-In Lng'])
+      ? { lat: parseFloat(s['Check-In Lat']), lng: parseFloat(s['Check-In Lng']) }
+      : (biz.id && venueLL[biz.id]) || {};
+    const companyId = venueCoMap[biz.id];
+    const date = (s['Completed At'] || s['Visit Date'] || s['Updated'] || '').slice(0, 10);
+    return {
+      id:    s.id,
+      lat:   ll.lat,
+      lng:   ll.lng,
+      name:  s['Name'] || biz.value || 'Visit',
+      date,
+      nav:   companyId ? ('/company/' + companyId) : '/companies',
+    };
+  }).filter(x => x.lat && x.lng);
+
+  // Overdue layer: from /api/outreach/due (already includes lat/lng)
+  const overdueLayer = (Array.isArray(overdueResp) ? overdueResp : []).map(c => ({
+    id:           c.id,
+    lat:          c.latitude  != null ? parseFloat(c.latitude)  : null,
+    lng:          c.longitude != null ? parseFloat(c.longitude) : null,
+    name:         c.name || '(unnamed)',
+    daysOverdue:  c.days_overdue || 0,
+    nav:          '/company/' + c.id,
+  })).filter(x => x.lat && x.lng);
+
+  // Initialize map (lazy on first load) and push layer data
+  hmInit();
+  _hmLayerData = {
+    route:   routeLayer,
+    boxes:   boxesLayer,
+    visits:  visitsLayer,
+    overdue: overdueLayer,
+  };
+  // Initialize toggle state if not set yet (per-state defaults; user-saved prefs win)
+  if (!_hmLayerOn) {
+    const stored = _hmLoadLayerPrefs();
+    _hmLayerOn = stored || Object.assign({}, HM_DEFAULTS[PAGE_STATE] || HM_DEFAULTS.A);
+  }
+  hmRenderChips();
+  hmRefreshLayers();
+
+  // Auto-pan in State C to the active stop (once per arrival)
+  if (PAGE_STATE === 'C' && activeStop) {
+    let lat = parseFloat(activeStop['Check-In Lat']);
+    let lng = parseFloat(activeStop['Check-In Lng']);
+    if (!lat || !lng) {
+      const ll = activeVenueId ? venueLL[activeVenueId] : null;
+      if (ll) { lat = ll.lat; lng = ll.lng; }
+    }
+    hmAutoPan(activeStop, lat, lng);
+  } else {
+    hmAutoPan(null);
+  }
+
+  // ── Worklist (merged: overdue boxes + overdue companies + due-soon boxes) ─
+  const wlItems = [];
   const activeBoxes = boxes.filter(b => sv(b['Status']) === 'Active' && b['Date Placed']);
   activeBoxes.forEach(b => {
     const placed = (b['Date Placed'] || '').slice(0, 10);
@@ -269,7 +641,6 @@ async function loadHomeDashboard() {
       overdue, placed, pickupDays
     });
   });
-
   (Array.isArray(overdueResp) ? overdueResp : []).forEach(c => {
     wlItems.push({
       kind: 'company',
@@ -279,10 +650,8 @@ async function loadHomeDashboard() {
       daysOverdue: c.days_overdue || 0
     });
   });
-
   wlItems.sort((a, b) => b.priority - a.priority);
   const top8 = wlItems.slice(0, 8);
-
   document.getElementById('wl-ct').textContent = wlItems.length ? '· ' + wlItems.length + ' items' : '';
 
   if (!top8.length) {
@@ -298,7 +667,6 @@ async function loadHomeDashboard() {
           '<span class="pill pill-overdue" style="white-space:nowrap">' + x.daysOverdue + 'd overdue</span>' +
         '</a>';
       }
-      // box row
       let pill, accent = '';
       if (x.overdue > 0)        { pill = '<span class="pill pill-overdue">' + x.overdue + 'd overdue</span>'; accent = ' card-urgent'; }
       else if (x.overdue === 0) { pill = '<span class="pill pill-warning">due today</span>'; accent = ' card-warning'; }
@@ -322,7 +690,6 @@ async function loadHomeDashboard() {
         '</div>' + btn + '</div>';
     }).join('');
   }
-  // Re-index the box rows so addBoxToTodayRoute(idx) hits the right entry.
   window._boxRows = top8.map(x => x.kind === 'box' ? x : null);
 
   // ── Yesterday recap ──────────────────────────────────────────────────
@@ -369,23 +736,19 @@ function quickLog(kind) {
     } else if (state === 'B') {
       window.location.href = '/route';
     } else {
-      // State A: open the GFR chooser so the rep picks the right form —
-      // each event type (External Event, Lunch and Learn, Health Assessment
-      // Screening, Mobile Massage Service, Business Outreach Log) has its
-      // own purpose-specific fields and shouldn't be collapsed into one.
-      if (typeof openGFRChooser === 'function') openGFRChooser();
+      // State A: a drop-by visit goes straight to Business Outreach Log.
+      // Events are their own button.
+      if (typeof openGFRForm === 'function') openGFRForm('Business Outreach Log');
       else window.location.href = '/companies';
     }
     return;
   }
-  if (kind === 'box') {
-    if (state === 'C' && window._activeVenueId) {
-      openPbModal({ venueId: window._activeVenueId, venueName: window._activeVenueName });
-    } else {
-      // State A/B: open the GFR chooser (covers Business Outreach Log w/ box-left field)
-      if (typeof openGFRChooser === 'function') openGFRChooser();
-      else window.location.href = '/companies';
-    }
+  if (kind === 'event') {
+    // The chooser surfaces External Event / Lunch and Learn / Mobile Massage
+    // Service / Health Assessment Screening (and Business Outreach Log).
+    if (typeof openGFRChooser === 'function') openGFRChooser();
+    else window.location.href = '/companies';
+    return;
   }
 }
 
@@ -415,75 +778,7 @@ function goStopNotes() {
   window.location.href = '/route';
 }
 
-// ── Place Box mini-modal ───────────────────────────────────────────────
-function openPbModal(opts) {
-  const o = opts || {};
-  const venueLocked = !!o.venueId;
-  const venueDisplay = esc(o.venueName || 'Active venue');
-  const body = document.getElementById('pb-modal-body');
-  body.innerHTML =
-    '<label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Venue' + (venueLocked ? '' : ' *') + '</label>' +
-    (venueLocked
-      ? '<div style="padding:9px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px;margin-bottom:12px">' +
-        venueDisplay + ' <span style="color:var(--text3);font-size:11px">(current stop)</span></div>'
-      : '<div style="padding:10px;background:var(--bg);border:1px dashed var(--border);color:var(--text3);border-radius:6px;font-size:12px;margin-bottom:12px;text-align:center">' +
-        'Open a company page and use its Place Box action.<br><a href="/companies" style="color:#004ac6;font-weight:600;text-decoration:none">→ Browse companies</a></div>'
-    ) +
-    '<label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Location (optional)</label>' +
-    '<input type="text" id="pb-loc" placeholder="e.g. by the front door" ' +
-    'style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px;margin-bottom:12px;font-family:inherit">' +
-    '<label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;display:block;margin-bottom:4px">Pickup days</label>' +
-    '<input type="number" id="pb-days" value="14" min="1" max="60" ' +
-    'style="width:100%;padding:9px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px;font-family:inherit">';
-  window._pbVenueId = o.venueId || null;
-  document.getElementById('pb-modal-msg').textContent = '';
-  const btn = document.getElementById('pb-submit');
-  btn.disabled = !venueLocked;
-  btn.style.opacity = venueLocked ? '1' : '.5';
-  document.getElementById('pb-modal-bg').style.display = 'flex';
-}
-function closePbModal() {
-  document.getElementById('pb-modal-bg').style.display = 'none';
-}
-async function submitPlaceBox() {
-  const msg = document.getElementById('pb-modal-msg');
-  const btn = document.getElementById('pb-submit');
-  msg.textContent = '';
-  const venueId = window._pbVenueId;
-  if (!venueId) {
-    msg.style.color = '#ef4444';
-    msg.textContent = 'No venue in scope.';
-    return;
-  }
-  const locEl = document.getElementById('pb-loc');
-  const daysEl = document.getElementById('pb-days');
-  const loc = locEl ? locEl.value.trim() : '';
-  const days = daysEl ? (parseInt(daysEl.value) || 14) : 14;
-  btn.disabled = true; btn.textContent = 'Placing…';
-  try {
-    const r = await fetch('/api/guerilla/boxes', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ venue_id: venueId, location: loc, pickup_days: days })
-    });
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      msg.style.color = '#ef4444';
-      msg.textContent = 'Failed: ' + (err.error || ('HTTP ' + r.status));
-      btn.disabled = false; btn.textContent = 'Place';
-      return;
-    }
-    msg.style.color = '#059669';
-    msg.textContent = 'Box placed ✓';
-    setTimeout(() => { closePbModal(); loadHomeDashboard(); }, 600);
-  } catch (e) {
-    msg.style.color = '#ef4444';
-    msg.textContent = 'Network error';
-    btn.disabled = false; btn.textContent = 'Place';
-  }
-}
-
-// ── Add a box-pickup stop to today's route (existing behavior, kept) ────
+// ── Add a box-pickup stop to today's route (worklist row's "+ Add") ─────
 async function addBoxToTodayRoute(idx) {
   const x = (window._boxRows || [])[idx];
   const routeId = window._todayRouteId;
