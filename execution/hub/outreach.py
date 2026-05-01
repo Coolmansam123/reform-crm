@@ -572,7 +572,8 @@ function applyFilters() {{
 # MAP DIRECTORY (shared template for Attorney / Gorilla / Community)
 # ──────────────────────────────────────────────────────────────────────────────
 def _map_page(tool_key: str, br: str, bt: str, user: dict = None) -> str:
-    gk = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    gk      = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    gmap_id = os.environ.get("GOOGLE_MAPS_MAP_ID", "")
     CONF = {
         'attorney':  {'label': 'PI Attorney',       'color': '#7c3aed', 'tid': T_ATT_VENUES,
                       'actsTid': T_ATT_ACTS,   'actLinkField': 'Law Firm',
@@ -684,6 +685,7 @@ function _lookupFirmCounts(name) {{
     stages_json = str(c['stages']).replace("'", '"')
     js = f"""
 const GK = '{gk}';
+const MAP_ID = '{gmap_id}';
 const OFFICE_LAT = 33.9478, OFFICE_LNG = -118.1335;
 const VENUES_TID = {c['tid']};
 const ACTS_TID = {c['actsTid']};
@@ -754,34 +756,46 @@ function applyFilters() {{
 // ─── Google Maps ─────────────────────────────────────────────────────────────
 const _STATUS_COLORS = {{'Not Contacted':'#4285f4','Contacted':'#fbbc04','In Discussion':'#ff9800'}};
 function _pinColor(s) {{ return s === _activeStatus ? '#34a853' : (_STATUS_COLORS[s] || '#9e9e9e'); }}
-function _pinIcon(color) {{
-  return {{ path: google.maps.SymbolPath.CIRCLE, scale: 6,
-            fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1 }};
-}}
-function _pinIconSelected(color) {{
-  return {{ path: google.maps.SymbolPath.CIRCLE, scale: 10,
-            fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }};
+// AdvancedMarker pin content. Selected pins are larger with a thicker border.
+function _pinContent(color, selected) {{
+  var el = document.createElement('div');
+  var size = selected ? 18 : 12;
+  var border = selected ? 3 : 2;
+  el.style.cssText = 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;'
+    + 'background:' + color + ';border:' + border + 'px solid #fff;'
+    + 'box-shadow:0 1px 3px rgba(0,0,0,.35);box-sizing:content-box';
+  return el;
 }}
 
 function initMap() {{
   if (!GK) {{ document.getElementById('gmap').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">Google Maps API key not configured.</div>'; return; }}
+  if (!MAP_ID) console.warn('GOOGLE_MAPS_MAP_ID is not set — AdvancedMarkers may not render.');
   window._mapReadyCb = function() {{
-    _map = new google.maps.Map(document.getElementById('gmap'), {{
+    var _opts = {{
       center: {{lat: OFFICE_LAT, lng: OFFICE_LNG}}, zoom: 12,
       mapTypeControl: false, streetViewControl: false, clickableIcons: false,
       styles: [{{featureType:'poi',stylers:[{{visibility:'off'}}]}},
                {{featureType:'transit',stylers:[{{visibility:'off'}}]}},
                {{featureType:'administrative.neighborhood',stylers:[{{visibility:'off'}}]}},
                {{featureType:'administrative.locality',elementType:'labels.icon',stylers:[{{visibility:'off'}}]}}]
-    }});
-    new google.maps.Marker({{ position: {{lat: OFFICE_LAT, lng: OFFICE_LNG}}, map: _map,
-      title: 'Reform Chiropractic',
-      icon: {{ url: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png' }}
-    }});
+    }};
+    if (MAP_ID) _opts.mapId = MAP_ID;
+    _map = new google.maps.Map(document.getElementById('gmap'), _opts);
+    if (google.maps.marker && google.maps.marker.AdvancedMarkerElement && google.maps.marker.PinElement) {{
+      var _officePin = new google.maps.marker.PinElement({{
+        background: '#ea4335', borderColor: '#b31412',
+        glyphColor: '#fff', glyph: '★', scale: 1.1,
+      }});
+      new google.maps.marker.AdvancedMarkerElement({{
+        position: {{lat: OFFICE_LAT, lng: OFFICE_LNG}}, map: _map,
+        title: 'Reform Chiropractic',
+        content: _officePin.element,
+      }});
+    }}
     renderMarkers();
   }};
   const s = document.createElement('script');
-  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + GK + '&callback=_mapReadyCb';
+  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + GK + '&v=weekly&libraries=marker&callback=_mapReadyCb';
   s.async = true; document.head.appendChild(s);
 }}
 
@@ -796,11 +810,12 @@ function renderMarkers() {{
     const status = sv(v['Contact Status']);
     if (_stageFilter && status !== _stageFilter) return;
     if (q && !(v[_nameField] || '').toLowerCase().includes(q)) return;
-    const marker = new google.maps.Marker({{
+    if (!(google.maps.marker && google.maps.marker.AdvancedMarkerElement)) return;
+    const marker = new google.maps.marker.AdvancedMarkerElement({{
       position: {{lat, lng}}, map: _map, title: v[_nameField] || '',
-      icon: _pinIcon(_pinColor(status))
+      content: _pinContent(_pinColor(status), false),
     }});
-    marker.addListener('click', () => showMapDetail(v));
+    marker.addListener('gmpClick', () => showMapDetail(v));
     _markerMap[v.id] = marker;
   }});
 }}
@@ -811,7 +826,7 @@ function closeSidebar() {{
   if (_selectedId && _markerMap[_selectedId]) {{
     const v = _venues.find(x => x.id === _selectedId);
     const s = v ? sv(v['Contact Status']) : '';
-    _markerMap[_selectedId].setIcon(_pinIcon(_pinColor(s)));
+    _markerMap[_selectedId].content = _pinContent(_pinColor(s), false);
   }}
   _selectedId = null;
   _currentVenue = null;
@@ -858,13 +873,13 @@ async function showMapDetail(v) {{
   if (_selectedId && _selectedId !== id && _markerMap[_selectedId]) {{
     const prev = _venues.find(x => x.id === _selectedId);
     const ps = prev ? sv(prev['Contact Status']) : '';
-    _markerMap[_selectedId].setIcon(_pinIcon(_pinColor(ps)));
+    _markerMap[_selectedId].content = _pinContent(_pinColor(ps), false);
   }}
   // Highlight new pin
   _selectedId = id;
   _currentVenue = v;
   const curStatus = sv(v['Contact Status']);
-  if (_markerMap[id]) _markerMap[id].setIcon(_pinIconSelected(_pinColor(curStatus)));
+  if (_markerMap[id]) _markerMap[id].content = _pinContent(_pinColor(curStatus), true);
 
   {fc_init}
   const name    = esc(v[_nameField] || '(unnamed)');
@@ -966,7 +981,7 @@ async function showMapDetail(v) {{
 async function updateStatus(id, val) {{
   const v = _venues.find(x => x.id === id);
   if (v) v['Contact Status'] = {{value: val}};
-  if (_markerMap[id]) _markerMap[id].setIcon(id === _selectedId ? _pinIconSelected(_pinColor(val)) : _pinIcon(_pinColor(val)));
+  if (_markerMap[id]) _markerMap[id].content = _pinContent(_pinColor(val), id === _selectedId);
   const st = document.getElementById('sb-status-st-' + id);
   if (st) st.textContent = 'Saving\u2026';
   const r = await bpatch(VENUES_TID, id, {{'Contact Status': {{value: val}}}});

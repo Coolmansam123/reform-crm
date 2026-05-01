@@ -125,7 +125,8 @@ async def get_active_reps(request: Request, br: str, bt: str,
 def _rep_tracker_page(br: str, bt: str, user: dict = None) -> str:
     from .shells import _page
     user = user or {}
-    gk = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    gk      = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    gmap_id = os.environ.get("GOOGLE_MAPS_MAP_ID", "")
     body = (
         '<style>.content{padding:0 !important}</style>'
         '<div id="reps-bar" style="display:flex;align-items:center;gap:8px;padding:8px 14px;'
@@ -145,18 +146,30 @@ def _rep_tracker_page(br: str, bt: str, user: dict = None) -> str:
     )
     js = f"""
 const RGK = '{gk}';
+const RMAP_ID = '{gmap_id}';
 let _rmap = null;
 let _rmarkers = {{}};
 let _repRows = [];
 
+// AdvancedMarker pin content for live reps. Color encodes recency.
+function _repPinContent(color) {{
+  var el = document.createElement('div');
+  el.style.cssText = 'width:18px;height:18px;border-radius:50%;background:' + color
+    + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);box-sizing:content-box';
+  return el;
+}}
+
 function initRepMap() {{
   if (_rmap) return;
-  _rmap = new google.maps.Map(document.getElementById('reps-map'), {{
+  if (!RMAP_ID) console.warn('GOOGLE_MAPS_MAP_ID is not set — AdvancedMarkers may not render.');
+  var _opts = {{
     center: {{lat: 33.9478, lng: -118.1335}}, zoom: 11,
     mapTypeControl: false, streetViewControl: false,
     styles: [{{featureType:'poi',stylers:[{{visibility:'off'}}]}},
              {{featureType:'transit',stylers:[{{visibility:'off'}}]}}]
-  }});
+  }};
+  if (RMAP_ID) _opts.mapId = RMAP_ID;
+  _rmap = new google.maps.Map(document.getElementById('reps-map'), _opts);
 }}
 
 function _fmtAgo(m) {{
@@ -179,12 +192,12 @@ function renderRepMarkers(rows) {{
     var color = r.mins_ago < 2 ? '#059669' : (r.mins_ago < 5 ? '#f59e0b' : '#9ca3af');
     var pos = {{lat: r.lat, lng: r.lng}};
     if (_rmarkers[r.email]) {{
-      _rmarkers[r.email].setPosition(pos);
-      _rmarkers[r.email].setIcon({{path: google.maps.SymbolPath.CIRCLE, scale: 11, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2}});
-    }} else {{
-      var m = new google.maps.Marker({{
+      _rmarkers[r.email].position = pos;
+      _rmarkers[r.email].content  = _repPinContent(color);
+    }} else if (google.maps.marker && google.maps.marker.AdvancedMarkerElement) {{
+      var m = new google.maps.marker.AdvancedMarkerElement({{
         position: pos, map: _rmap,
-        icon: {{path: google.maps.SymbolPath.CIRCLE, scale: 11, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2}},
+        content: _repPinContent(color),
         title: r.name + ' — ' + _fmtAgo(r.mins_ago),
       }});
       _rmarkers[r.email] = m;
@@ -219,7 +232,7 @@ function renderRepList(rows) {{
 function zoomRep(email) {{
   var m = _rmarkers[email];
   if (!m || !_rmap) return;
-  _rmap.panTo(m.getPosition());
+  _rmap.panTo(m.position);
   _rmap.setZoom(15);
 }}
 
@@ -238,7 +251,7 @@ async function pollReps() {{
 function _initWhenMapReady() {{
   if (window.google && window.google.maps) {{ initRepMap(); pollReps(); setInterval(pollReps, 15000); return; }}
   var s = document.createElement('script');
-  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + RGK + '&callback=_initWhenMapReady';
+  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + RGK + '&v=weekly&libraries=marker&callback=_initWhenMapReady';
   s.async = true;
   window._initWhenMapReady = function() {{ initRepMap(); pollReps(); setInterval(pollReps, 15000); }};
   document.head.appendChild(s);

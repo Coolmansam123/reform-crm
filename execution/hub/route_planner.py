@@ -22,7 +22,8 @@ from .guerilla import (
 # Route Planner Page
 # ===========================================================================
 def _route_planner_page(br: str, bt: str, user: dict = None) -> str:
-    gk = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    gk      = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    gmap_id = os.environ.get("GOOGLE_MAPS_MAP_ID", "")
     admin = _is_admin(user or {})
     _uname = (user or {}).get('name', '')
     _uemail = (user or {}).get('email', '')
@@ -131,6 +132,7 @@ def _route_planner_page(br: str, bt: str, user: dict = None) -> str:
 
     js = f"""
 const GK = '{gk}';
+const MAP_ID = '{gmap_id}';
 // IS_ADMIN is set by page shell
 const OFFICE_LAT = 33.9478, OFFICE_LNG = -118.1335;
 const USER_EMAIL = '{_uemail}';
@@ -328,8 +330,9 @@ function initMap() {{
     document.getElementById('gmap').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">Google Maps API key not configured.</div>';
     return;
   }}
+  if (!MAP_ID) console.warn('GOOGLE_MAPS_MAP_ID is not set — AdvancedMarkers may not render.');
   window._mapReadyCb = function() {{
-    _map = new google.maps.Map(document.getElementById('gmap'), {{
+    var _opts = {{
       center: {{lat: OFFICE_LAT, lng: OFFICE_LNG}}, zoom: 12,
       mapTypeControl: false, streetViewControl: false, clickableIcons: false,
       styles: [
@@ -338,30 +341,39 @@ function initMap() {{
         {{featureType:'administrative.neighborhood',stylers:[{{visibility:'off'}}]}},
         {{featureType:'administrative.locality',elementType:'labels.icon',stylers:[{{visibility:'off'}}]}}
       ]
-    }});
-    var _officeMarker = new google.maps.Marker({{
-      position: {{lat: OFFICE_LAT, lng: OFFICE_LNG}}, map: _map,
-      title: 'Reform Chiropractic (Home Office)',
-      icon: {{ url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png' }}
-    }});
-    _officeMarker.addListener('click', function() {{
-      if (_routeMode) {{
-        addRouteStop({{
-          _isOffice: true,
-          id: 0, _tid: 0, _tool: 'office',
-          _nameField: '_name', _addrField: '_addr',
-          _name: 'Reform Chiropractic',
-          _addr: '3816 E Florence Ave, Bell, CA 90201',
-          Latitude: OFFICE_LAT, Longitude: OFFICE_LNG
-        }});
-      }}
-    }});
+    }};
+    if (MAP_ID) _opts.mapId = MAP_ID;
+    _map = new google.maps.Map(document.getElementById('gmap'), _opts);
+    var _officeMarker = null;
+    if (google.maps.marker && google.maps.marker.AdvancedMarkerElement && google.maps.marker.PinElement) {{
+      var _officePin = new google.maps.marker.PinElement({{
+        background: '#ea4335', borderColor: '#b31412',
+        glyphColor: '#fff', glyph: '★', scale: 1.1,
+      }});
+      _officeMarker = new google.maps.marker.AdvancedMarkerElement({{
+        position: {{lat: OFFICE_LAT, lng: OFFICE_LNG}}, map: _map,
+        title: 'Reform Chiropractic (Home Office)',
+        content: _officePin.element,
+      }});
+      _officeMarker.addListener('gmpClick', function() {{
+        if (_routeMode) {{
+          addRouteStop({{
+            _isOffice: true,
+            id: 0, _tid: 0, _tool: 'office',
+            _nameField: '_name', _addrField: '_addr',
+            _name: 'Reform Chiropractic',
+            _addr: '3816 E Florence Ave, Bell, CA 90201',
+            Latitude: OFFICE_LAT, Longitude: OFFICE_LNG
+          }});
+        }}
+      }});
+    }}
     _mapReady = true;
     applyFilters();
     _tryDeepLink();
   }};
   const s = document.createElement('script');
-  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + GK + '&callback=_mapReadyCb';
+  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + GK + '&v=weekly&libraries=marker&callback=_mapReadyCb';
   s.async = true;
   s.onerror = function() {{
     document.getElementById('gmap').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">Failed to load Google Maps. Check API key.</div>';
@@ -374,20 +386,17 @@ function pinColor(v) {{
   const t = TOOLS[v._tool];
   return t ? t.color : '#9e9e9e';
 }}
-function _pinIcon(color, hasBoxAlert) {{
-  return {{
-    path: google.maps.SymbolPath.CIRCLE, scale: 7,
-    fillColor: color, fillOpacity: 1,
-    strokeColor: hasBoxAlert ? '#f59e0b' : '#fff',
-    strokeWeight: hasBoxAlert ? 3 : 1
-  }};
-}}
-function _pinIconSelected(color) {{
-  return {{
-    path: google.maps.SymbolPath.CIRCLE, scale: 13,
-    fillColor: color, fillOpacity: 1,
-    strokeColor: '#fff', strokeWeight: 3
-  }};
+// AdvancedMarker pin content. Box alerts show an amber border;
+// selected pins are larger.
+function _pinContent(color, hasBoxAlert, selected) {{
+  var el = document.createElement('div');
+  var size = selected ? 22 : 14;
+  var border = selected ? 3 : (hasBoxAlert ? 3 : 2);
+  var borderColor = hasBoxAlert ? '#f59e0b' : '#fff';
+  el.style.cssText = 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;'
+    + 'background:' + color + ';border:' + border + 'px solid ' + borderColor + ';'
+    + 'box-shadow:0 1px 4px rgba(0,0,0,.4);box-sizing:content-box';
+  return el;
 }}
 function _hasBoxAlert(v) {{
   if (v._tool !== 'gorilla') return false;
@@ -479,12 +488,13 @@ function renderMarkers() {{
     if (!lat || !lng) return;
     const color = pinColor(v);
     const alert = _hasBoxAlert(v);
-    const marker = new google.maps.Marker({{
+    if (!(google.maps.marker && google.maps.marker.AdvancedMarkerElement)) return;
+    const marker = new google.maps.marker.AdvancedMarkerElement({{
       position: {{lat, lng}}, map: _map,
       title: v[v._nameField] || '',
-      icon: _pinIcon(color, alert)
+      content: _pinContent(color, alert, false),
     }});
-    marker.addListener('click', () => {{
+    marker.addListener('gmpClick', () => {{
       if (_routeMode) {{
         addRouteStop(v);
       }} else {{
@@ -503,7 +513,7 @@ function closeSidebar() {{
   if (sb) sb.classList.remove('open');
   if (_selectedId && _markerMap[_selectedId]) {{
     const prev = _allVenues.find(x => _venueKey(x) === _selectedId);
-    if (prev) _markerMap[_selectedId].setIcon(_pinIcon(pinColor(prev), _hasBoxAlert(prev)));
+    if (prev) _markerMap[_selectedId].content = _pinContent(pinColor(prev), _hasBoxAlert(prev), false);
   }}
   _selectedId = null;
   _currentVenue = null;
@@ -518,11 +528,11 @@ function showDetail(v) {{
   // Deselect previous
   if (_selectedId && _selectedId !== key && _markerMap[_selectedId]) {{
     const prev = _allVenues.find(x => _venueKey(x) === _selectedId);
-    if (prev) _markerMap[_selectedId].setIcon(_pinIcon(pinColor(prev), _hasBoxAlert(prev)));
+    if (prev) _markerMap[_selectedId].content = _pinContent(pinColor(prev), _hasBoxAlert(prev), false);
   }}
   _selectedId = key;
   _currentVenue = v;
-  if (_markerMap[key]) _markerMap[key].setIcon(_pinIconSelected(tool.color));
+  if (_markerMap[key]) _markerMap[key].content = _pinContent(tool.color, false, true);
 
   // Center map on venue
   const lat = parseFloat(v['Latitude']), lng = parseFloat(v['Longitude']);
@@ -1025,7 +1035,7 @@ async function updateStatus(id, tid, val, key) {{
   const v = _allVenues.find(x => _venueKey(x) === key);
   if (v) v['Contact Status'] = {{value: val}};
   const tool = v ? TOOLS[v._tool] : null;
-  if (_markerMap[key]) _markerMap[key].setIcon(_pinIconSelected(tool ? tool.color : '#9e9e9e'));
+  if (_markerMap[key]) _markerMap[key].content = _pinContent(tool ? tool.color : '#9e9e9e', false, true);
   const badge  = document.getElementById('sb-stat-badge-' + key);
   const saveEl = document.getElementById('sb-stat-save-' + key);
   const sel    = document.getElementById('sb-stat-sel-' + key);
