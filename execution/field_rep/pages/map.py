@@ -10,12 +10,23 @@ from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
 
 
 def _mobile_map_page(br: str, bt: str, user: dict = None) -> str:
-    gk = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    gk      = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+    gmap_id = os.environ.get("GOOGLE_MAPS_MAP_ID", "")
     user = user or {}
     user_name = user.get('name', '')
+    # Pulse keyframe for high-attention pins (overdue boxes). Local to map page.
+    map_css = (
+        '<style>'
+        '@keyframes gpulse {'
+        ' 0%{transform:scale(1);opacity:.55}'
+        ' 100%{transform:scale(1.7);opacity:0}'
+        '}'
+        '</style>'
+    )
     body = (
+        map_css
         # Full-screen map -- breaks out of mobile-wrap via position:fixed
-        '<div class="m-map-wrap" id="gmap">'
+        + '<div class="m-map-wrap" id="gmap">'
         '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:14px">Loading map...</div>'
         '</div>'
         # Filter bar: search + tool pills + status pills (single container)
@@ -47,6 +58,7 @@ window.onerror = function(msg, url, line) {{
   if (el && !_gMap) el.innerHTML = '<div style="padding:20px;color:#ef4444;font-size:13px;word-break:break-all">JS Error: ' + msg + ' (line ' + line + ')</div>';
 }};
 const GK = {repr(gk)};
+const GMAP_ID = {repr(gmap_id)};
 const _GGOR_TID = {T_GOR_VENUES};
 const _GCOM_TID = {T_COM_VENUES};
 const _GGOR_ACTS = {T_GOR_ACTS};
@@ -54,6 +66,7 @@ const _GCOM_ACTS = {T_COM_ACTS};
 const _GBOXES   = {T_GOR_BOXES};
 const _GOFF_LAT = 33.9478, _GOFF_LNG = -118.1335;
 const _GSTATUS_COLORS = {{'Not Contacted':'#4285f4','Contacted':'#fbbc04','In Discussion':'#ff9800','Active Partner':'#34a853','Active Relationship':'#34a853'}};
+const _GTOOL_BORDER   = {{'gorilla':'#ea580c','community':'#059669'}};
 
 var _gVenues = [], _gFilter = 'all', _gStatusFilter = '', _gSearch = '', _gMap, _gMarkers = {{}};
 var _currentVenueM = null;
@@ -91,14 +104,48 @@ async function loadMapVenues() {{
   }}
 }}
 
-function _gPinIcon(color, tool) {{
-  return {{
-    path: google.maps.SymbolPath.CIRCLE,
-    scale: tool === 'gorilla' ? 9 : 8,
-    fillColor: color, fillOpacity: 1,
-    strokeColor: tool === 'gorilla' ? '#ea580c' : '#059669',
-    strokeWeight: 2
-  }};
+// Pin factories (AdvancedMarker era).
+//   _gPinContent(v, alertLevel) -> HTMLElement
+//     Default: PinElement with status fill + tool-type border + status glyph.
+//     Alert states (overdue boxes): custom HTML with pulsing ring (see _gPinAlertHtml).
+// TODO(v2): extract these to a shared `_map_helpers.py` so the home page V2
+// embedded map can reuse the exact same look.
+function _gPinContent(v, alertLevel) {{
+  const status = sv(v['Contact Status']) || 'Unknown';
+  const tool   = v._tool || 'gorilla';
+  const fill   = _GSTATUS_COLORS[status] || '#9e9e9e';
+  const ring   = _GTOOL_BORDER[tool] || '#666';
+  const glyph  = (status === 'Active Partner') ? '★'
+              :  (status === 'In Discussion')  ? '?'
+              :  (status === 'Contacted')      ? '·'
+              :  '';
+  if (alertLevel === 'action' || alertLevel === 'warning') {{
+    return _gPinAlertHtml(fill, ring, alertLevel, glyph);
+  }}
+  if (!(google.maps.marker && google.maps.marker.PinElement)) {{
+    // marker library failed to load; return a neutral div so we don't crash.
+    var fb = document.createElement('div');
+    fb.style.cssText = 'width:14px;height:14px;border-radius:50%;background:' + fill + ';border:2px solid ' + ring;
+    return fb;
+  }}
+  const pin = new google.maps.marker.PinElement({{
+    background: fill,
+    borderColor: ring,
+    glyph: glyph,
+    glyphColor: '#fff',
+    scale: tool === 'gorilla' ? 1.0 : 0.9,
+  }});
+  return pin.element;
+}}
+
+function _gPinAlertHtml(fill, ring, level, glyph) {{
+  const pulseColor = level === 'action' ? '#ef4444' : '#f59e0b';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center';
+  wrap.innerHTML =
+    '<span style="position:absolute;inset:0;border-radius:50%;background:' + pulseColor + ';opacity:.45;animation:gpulse 1.6s ease-out infinite"></span>' +
+    '<span style="position:relative;width:22px;height:22px;border-radius:50%;background:' + fill + ';border:3px solid ' + ring + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.3)">' + (glyph || '') + '</span>';
+  return wrap;
 }}
 
 function initGMap() {{
@@ -106,20 +153,37 @@ function initGMap() {{
     document.getElementById('gmap').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3)">Maps API key not configured.</div>';
     return;
   }}
+  if (!GMAP_ID) {{
+    // AdvancedMarkers require a Map ID. The page still loads, but pins won't render
+    // correctly. Surface this loudly so the env-var fix is obvious.
+    console.warn('GOOGLE_MAPS_MAP_ID is not set. AdvancedMarkers require a Map ID — create one in Google Cloud Console (Maps Platform → Map Management) and add to .env as GOOGLE_MAPS_MAP_ID.');
+  }}
   window._gMapReadyCb = function() {{
     var el = document.getElementById('gmap');
     el.style.height = el.offsetHeight + 'px';
-    _gMap = new google.maps.Map(el, {{
+    var mapOpts = {{
       center: {{lat: _GOFF_LAT, lng: _GOFF_LNG}}, zoom: 13,
       mapTypeControl: false, streetViewControl: false,
+      // Inline `styles` is ignored once `mapId` is set — Map ID's cloud-based
+      // styling supersedes it. Kept here as a TODO: reproduce POI/transit hides
+      // in the cloud Map ID style for parity with the legacy look.
       styles: [{{featureType:'poi',stylers:[{{visibility:'off'}}]}},
                {{featureType:'transit',stylers:[{{visibility:'off'}}]}}]
-    }});
-    new google.maps.Marker({{
-      position: {{lat: _GOFF_LAT, lng: _GOFF_LNG}}, map: _gMap,
-      title: 'Reform Chiropractic',
-      icon: {{url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'}}
-    }});
+    }};
+    if (GMAP_ID) mapOpts.mapId = GMAP_ID;
+    _gMap = new google.maps.Map(el, mapOpts);
+    // Office marker — AdvancedMarkerElement with a star-glyph PinElement.
+    if (google.maps.marker && google.maps.marker.AdvancedMarkerElement && google.maps.marker.PinElement) {{
+      var officePin = new google.maps.marker.PinElement({{
+        background: '#ea4335', borderColor: '#b31412',
+        glyphColor: '#fff', glyph: '★', scale: 1.1,
+      }});
+      new google.maps.marker.AdvancedMarkerElement({{
+        position: {{lat: _GOFF_LAT, lng: _GOFF_LNG}}, map: _gMap,
+        title: 'Reform Chiropractic',
+        content: officePin.element,
+      }});
+    }}
     setTimeout(function(){{ google.maps.event.trigger(_gMap, 'resize'); _gMap.setCenter({{lat: _GOFF_LAT, lng: _GOFF_LNG}}); }}, 100);
     renderGMarkers();
     // ── Venue focus mode: /map?venue=<id> centers and opens its sheet ─────
@@ -141,7 +205,7 @@ function initGMap() {{
     }}
   }};
   var s = document.createElement('script');
-  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + GK + '&callback=_gMapReadyCb';
+  s.src = 'https://maps.googleapis.com/maps/api/js?key=' + GK + '&v=weekly&libraries=marker&callback=_gMapReadyCb';
   s.async = true;
   s.onerror = function() {{
     document.getElementById('gmap').innerHTML = '<div style="padding:40px;text-align:center;color:#ef4444;font-size:14px">Failed to load Google Maps script. Check API key &amp; network.</div>';
@@ -161,18 +225,19 @@ function renderGMarkers() {{
     if (_gSearch && (v['Name']||'').toLowerCase().indexOf(_gSearch) < 0) return;
     var lat = parseFloat(v['Latitude']), lng = parseFloat(v['Longitude']);
     if (!lat || !lng) return;
-    var status = sv(v['Contact Status']);
-    var color  = _GSTATUS_COLORS[status] || '#9e9e9e';
-    // Override stroke for box alerts
-    var alertLevel = _boxAlerts[v.id];
-    var strokeColor = alertLevel === 'action' ? '#ef4444' : alertLevel === 'warning' ? '#f59e0b' : (v._tool === 'gorilla' ? '#ea580c' : '#059669');
-    var marker = new google.maps.Marker({{
+    var alertLevel = _boxAlerts[v.id];  // 'action' | 'warning' | undefined
+    if (!(google.maps.marker && google.maps.marker.AdvancedMarkerElement)) {{
+      // Marker library failed to load (likely missing &libraries=marker on the
+      // script URL or a CSP rejection). Skip rendering this pin rather than crash.
+      return;
+    }}
+    var marker = new google.maps.marker.AdvancedMarkerElement({{
       position: {{lat: lat, lng: lng}}, map: _gMap,
       title: v['Name'] || '',
-      icon: {{path:google.maps.SymbolPath.CIRCLE, scale:v._tool==='gorilla'?9:8, fillColor:color, fillOpacity:1, strokeColor:strokeColor, strokeWeight:alertLevel?3:2}}
+      content: _gPinContent(v, alertLevel),
     }});
     (function(venue) {{
-      marker.addListener('click', function() {{ openSheet(venue); }});
+      marker.addListener('gmpClick', function() {{ openSheet(venue); }});
     }})(v);
     _gMarkers[v.id + '_' + v._tool] = marker;
   }});
@@ -451,9 +516,9 @@ async function updateMapStatus(id, tid, val) {{
   if (v) v['Contact Status'] = {{value: val}};
   var toolKey = tid === _GGOR_TID ? 'gorilla' : 'community';
   var k = id + '_' + toolKey;
-  if (_gMarkers[k]) {{
-    var color = _GSTATUS_COLORS[val] || '#9e9e9e';
-    _gMarkers[k].setIcon(_gPinIcon(color, toolKey));
+  if (_gMarkers[k] && v) {{
+    // AdvancedMarker uses `.content` instead of `.setIcon()`.
+    _gMarkers[k].content = _gPinContent(v, _boxAlerts[id]);
   }}
   await bpatch_m(tid, id, {{'Contact Status': {{value: val}}}});
 }}
