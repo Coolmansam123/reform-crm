@@ -69,7 +69,7 @@ app = modal.App("outreach-hub")
 image = (
     modal.Image.debian_slim()
     .apt_install("libpango-1.0-0", "libpangoft2-1.0-0", "libcairo2", "libfontconfig1")
-    .pip_install("fastapi[standard]", "python-multipart", "httpx", "weasyprint", "openai==1.59.*", "pywebpush==2.0.*")
+    .pip_install("fastapi[standard]", "python-multipart", "httpx", "weasyprint", "openai==1.59.*", "pywebpush==2.0.*", "tzdata>=2024.1")
     .add_local_python_source("hub")
 )
 

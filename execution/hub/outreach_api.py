@@ -11,6 +11,7 @@ from typing import Awaitable, Callable
 from fastapi.responses import JSONResponse
 
 from .constants import T_COMPANIES, T_ACTIVITIES, T_GOR_ROUTE_STOPS
+from .tz import local_today as _local_today
 
 CachedRowsFn = Callable[[int], Awaitable[list]]
 
@@ -292,7 +293,7 @@ async def get_outreach_due(
     if not T_COMPANIES:
         return JSONResponse([])
     rows = await cached_rows(T_COMPANIES)
-    today_iso = _date.today().isoformat()
+    today_iso = _local_today().isoformat()
 
     out: list[dict] = []
     for c in rows or []:
@@ -304,7 +305,7 @@ async def get_outreach_due(
         try:
             y, m, d = fu.split("-")
             from datetime import date as _d
-            days = (_date.today() - _d(int(y), int(m), int(d))).days
+            days = (_local_today() - _d(int(y), int(m), int(d))).days
         except Exception:
             days = 0
         venue_id = None
@@ -348,7 +349,7 @@ async def get_skipped_stops(
     if not T_GOR_ROUTE_STOPS:
         return JSONResponse([])
     stops = await cached_rows(T_GOR_ROUTE_STOPS) or []
-    today = _date.today()
+    today = _local_today()
     cutoff_ord = today.toordinal() - window_days
 
     from datetime import date as _d

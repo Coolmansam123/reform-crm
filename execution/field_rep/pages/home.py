@@ -9,6 +9,7 @@ from hub.shared import (
 )
 from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
 from hub.maps import MAP_PALETTE_JS, OFFICE_PIN_JS, map_script_url
+from hub.tz import local_today
 
 
 _HOME_CSS = """
@@ -72,12 +73,11 @@ _HOME_CSS = """
 
 
 def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
-    import datetime
     gk      = os.environ.get("GOOGLE_MAPS_API_KEY", "")
     gmap_id = os.environ.get("GOOGLE_MAPS_MAP_ID", "")
     user = user or {}
     first = (user.get('name', 'there') or 'there').split()[0]
-    today = datetime.date.today()
+    today = local_today()
     day_str = f"{today.strftime('%A')}, {today.strftime('%B')} {today.day}"
     user_name = user.get('name', '')
     user_email = (user.get('email', '') or '').strip().lower()
@@ -100,6 +100,18 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         +   '<div class="only-b" id="hero-b"></div>'
         +   '<div class="only-c" id="hero-c"></div>'
         + '</div>'
+        # ── Quick-log row (3 buttons: Lead / Visit / Event) ────────────────
+        + '<div class="qlog-row">'
+        +   '<button class="qlog-btn" onclick="quickLog(\'lead\')">'
+        +     '<span class="material-symbols-outlined">person_add</span>'
+        +     '<span>Log Lead</span></button>'
+        +   '<button class="qlog-btn" id="qlog-visit-btn" onclick="quickLog(\'visit\')">'
+        +     '<span class="material-symbols-outlined">check_circle</span>'
+        +     '<span id="qlog-visit-lbl">Log Visit</span></button>'
+        +   '<button class="qlog-btn" onclick="quickLog(\'event\')">'
+        +     '<span class="material-symbols-outlined">event</span>'
+        +     '<span>Log Event</span></button>'
+        + '</div>'
         # ── Map card (anchor) ──────────────────────────────────────────────
         + '<div id="home-map-card">'
         +   '<div id="hm-chips"></div>'
@@ -113,18 +125,6 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         +   '<a href="/todo"   id="ss-overdue">— overdue</a>'
         +   '<span class="sep">·</span>'
         +   '<a href="/lead"   id="ss-leads">— leads (7d)</a>'
-        + '</div>'
-        # ── Quick-log row (3 buttons: Lead / Visit / Event) ────────────────
-        + '<div class="qlog-row">'
-        +   '<button class="qlog-btn" onclick="quickLog(\'lead\')">'
-        +     '<span class="material-symbols-outlined">person_add</span>'
-        +     '<span>Log Lead</span></button>'
-        +   '<button class="qlog-btn" id="qlog-visit-btn" onclick="quickLog(\'visit\')">'
-        +     '<span class="material-symbols-outlined">check_circle</span>'
-        +     '<span id="qlog-visit-lbl">Log Visit</span></button>'
-        +   '<button class="qlog-btn" onclick="quickLog(\'event\')">'
-        +     '<span class="material-symbols-outlined">event</span>'
-        +     '<span>Log Event</span></button>'
         + '</div>'
         # ── Worklist ───────────────────────────────────────────────────────
         + '<div class="label-caps" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'

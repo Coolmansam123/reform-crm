@@ -16,6 +16,8 @@ modal_outreach_hub.py does: fetch company row by slug → fetch patients
 linked to that firm → _portal_page(...) → HTMLResponse.
 """
 from datetime import date, datetime
+
+from .tz import local_today
 from html import escape as _esc
 import secrets
 
@@ -73,7 +75,7 @@ def _days_since(s):
         s = str(s)[:10]
         y, m, d = s.split("-")
         dt = date(int(y), int(m), int(d))
-        return (date.today() - dt).days
+        return (local_today() - dt).days
     except Exception:
         return None
 
@@ -167,7 +169,7 @@ def _portal_page(firm: dict, patients_by_stage: dict, *, last_updated_iso: str =
 </div>
 """
 
-    footer_year = date.today().year
+    footer_year = local_today().year
 
     return f"""<!DOCTYPE html><html lang="en">
 <head>

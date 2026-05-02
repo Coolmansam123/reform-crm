@@ -27,6 +27,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from .access import _has_hub_access, _is_admin
+from .tz import local_today as _local_today
 from .constants import (
     T_EVENTS, T_GOR_ACTS, T_GOR_BOXES, T_GOR_ROUTES, T_GOR_ROUTE_STOPS,
     T_GOR_VENUES, T_COMPANIES, T_LEADS, T_ACTIVITIES,
@@ -77,7 +78,7 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
     if not form_type:
         return JSONResponse({"ok": False, "error": "form_type required"}, status_code=400)
 
-    today = _date.today().isoformat()
+    today = _local_today().isoformat()
 
     async with httpx.AsyncClient(timeout=60) as client:
         br_headers = {"Authorization": f"Token {bt}", "Content-Type": "application/json"}
@@ -158,21 +159,6 @@ async def guerilla_log(request: Request, br: str, bt: str, user: dict,
                 _f("Email",           fields.get("contact_email")),
                 _f("Address",         fields.get("business_address")),
                 _f("Massage Box Left",fields.get("massage_box_left")),
-                "\n=== Lunch & Learn ===\n",
-                _f("Interested",       fields.get("ll_interested")),
-                _f("Follow-Up Date",   fields.get("ll_follow_up_date")),
-                _f("Booking Requested",fields.get("ll_booking_requested")),
-                _f("Notes",            fields.get("ll_notes")),
-                "\n=== Health Assessment Screening ===\n",
-                _f("Interested",       fields.get("has_interested")),
-                _f("Follow-Up Date",   fields.get("has_follow_up_date")),
-                _f("Booking Requested",fields.get("has_booking_requested")),
-                _f("Notes",            fields.get("has_notes")),
-                "\n=== Mobile Massage Service ===\n",
-                _f("Interested",       fields.get("mms_interested")),
-                _f("Follow-Up Date",   fields.get("mms_follow_up_date")),
-                _f("Booking Requested",fields.get("mms_booking_requested")),
-                _f("Notes",            fields.get("mms_notes")),
                 "\n",
                 _f("Consultations Gifted", fields.get("consultations_gifted")),
                 _f("Massages Gifted",       fields.get("massages_gifted")),
@@ -493,7 +479,7 @@ async def create_box(request: Request, br: str, bt: str, user: dict) -> JSONResp
     promo_items    = (body.get("promo_items") or "").strip()
     if not venue_id:
         return JSONResponse({"ok": False, "error": "venue_id required"}, status_code=400)
-    today = _date.today().isoformat()
+    today = _local_today().isoformat()
     box_fields = {
         "Business": [int(venue_id)],
         "Status":   "Active",
@@ -522,7 +508,7 @@ async def pickup_box(request: Request, br: str, bt: str, user: dict,
         await client.patch(
             f"{br}/api/database/rows/table/{T_GOR_BOXES}/{box_id}/?user_field_names=true",
             headers={"Authorization": f"Token {bt}", "Content-Type": "application/json"},
-            json={"Status": "Picked Up", "Date Removed": _date.today().isoformat()},
+            json={"Status": "Picked Up", "Date Removed": _local_today().isoformat()},
         )
     return JSONResponse({"ok": True})
 
@@ -650,7 +636,7 @@ async def _build_route_response(route: dict, cached_rows: CachedRowsFn) -> dict:
     venues = await cached_rows(T_GOR_VENUES)
     venue_map = {v["id"]: v for v in venues}
     boxes = await cached_rows(T_GOR_BOXES)
-    today_d = _date.today()
+    today_d = _local_today()
     pending_box_by_venue = {}
     for b in boxes:
         b_status = b.get("Status") or ""
@@ -726,7 +712,7 @@ async def routes_today(request: Request, br: str, bt: str, user: dict,
     if not T_GOR_ROUTES or not T_GOR_ROUTE_STOPS:
         return JSONResponse({"route": None, "stops": []})
     user_email = (user.get("email") or "").lower()
-    today = _date.today().isoformat()
+    today = _local_today().isoformat()
     try:
         routes = await cached_rows(T_GOR_ROUTES)
         route = None
@@ -843,7 +829,7 @@ async def get_active_stop(request: Request, br: str, bt: str, user: dict,
     if not T_GOR_ROUTES or not T_GOR_ROUTE_STOPS:
         return JSONResponse(None)
     user_email = (user.get("email", "") or "").strip().lower()
-    today = _date.today().isoformat()
+    today = _local_today().isoformat()
     routes = await cached_rows(T_GOR_ROUTES)
     today_route = None
     for r in routes:

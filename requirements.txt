@@ -17,6 +17,7 @@ fastapi[standard]>=0.111.0
 # Utilities
 python-dateutil>=2.8.2
 esprima>=4.0.1  # JS syntax checker used by execution/diagnose.py
+tzdata>=2024.1  # zoneinfo data for America/Los_Angeles on Windows + slim images
 
 # Attorney Mapper
 serpapi>=2.4.2

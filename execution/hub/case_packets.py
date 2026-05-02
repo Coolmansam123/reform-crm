@@ -3,6 +3,8 @@ Case Packet generator — PDF summary of a PI patient for the referring attorney
 v1: download-only; email + attorney-facing delivery land in later iterations.
 """
 from datetime import date
+
+from .tz import local_today
 from html import escape as _esc
 
 
@@ -107,12 +109,12 @@ def _packet_html(patient: dict, finance_rows: list, stage: str = "") -> str:
                 "</div>"
             )
 
-    today = date.today().strftime("%B %-d, %Y") if hasattr(date.today(), "strftime") else str(date.today())
+    _today = local_today()
     try:
+        today = _today.strftime("%B %-d, %Y")
+    except ValueError:
         # Windows strftime doesn't support %-d; fall back to %d and strip leading zero
-        today = date.today().strftime("%B %d, %Y").replace(" 0", " ")
-    except Exception:
-        today = str(date.today())
+        today = _today.strftime("%B %d, %Y").replace(" 0", " ")
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Case Packet — {_esc(name)}</title>

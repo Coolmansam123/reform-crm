@@ -89,12 +89,6 @@ _GFR_HTML = (
     '</div>'
     '<div class="gfr-chooser-body">'
     '<div class="gfr-grid">'
-    '<div class="gfr-card" onclick="openGFRForm(\'Business Outreach Log\')">'
-    '<div class="gfr-card-icon">&#x1f3e2;</div>'
-    '<div class="gfr-card-name">Business Outreach Log</div>'
-    '<div class="gfr-card-desc">Door-to-door visit, massage box placement, and program interest</div>'
-    '<div class="gfr-card-cta">Open &#x2192;</div>'
-    '</div>'
     '<div class="gfr-card" onclick="openGFRForm(\'External Event\')">'
     '<div class="gfr-card-icon">&#x1f3aa;</div>'
     '<div class="gfr-card-name">External Event</div>'
@@ -167,74 +161,6 @@ _GFR_HTML = (
     '<label><input type="radio" name="bol-mbox" value="Yes"> Yes</label>'
     '<label><input type="radio" name="bol-mbox" value="No"> No</label>'
     '</div></div></div>'
-
-    # Programs
-    '<div class="gfr-section">'
-    '<div class="gfr-section-title">Available Programs</div>'
-
-    # L&L
-    '<div class="gfr-program">'
-    '<div class="gfr-program-title">&#x1f37d;&#xfe0f; Lunch &amp; Learn</div>'
-    '<div class="gfr-program-desc">Reform presents a 30\u201360 min educational lunch session on injury prevention and chiropractic care \u2014 fully catered by Reform.</div>'
-    '<div class="gfr-two">'
-    '<div class="gfr-field"><label class="gfr-label">Interested?</label>'
-    '<select class="gfr-select" id="bol-ll-int"><option value="">Select\u2026</option>'
-    '<option>Yes</option><option>Maybe</option><option>No</option><option>N/A</option>'
-    '</select></div>'
-    '<div class="gfr-field"><label class="gfr-label">Follow-Up Date</label>'
-    '<input class="gfr-input" id="bol-ll-fu" type="date"></div>'
-    '</div>'
-    '<div class="gfr-field"><label class="gfr-label">Booking Requested?</label>'
-    '<div class="gfr-radio-group">'
-    '<label><input type="radio" name="bol-ll-book" value="Yes"> Yes</label>'
-    '<label><input type="radio" name="bol-ll-book" value="No"> No</label>'
-    '</div></div>'
-    '<div class="gfr-field"><label class="gfr-label">Notes</label>'
-    '<textarea class="gfr-textarea" id="bol-ll-notes" placeholder="Additional notes\u2026"></textarea>'
-    '</div></div>'
-
-    # HAS
-    '<div class="gfr-program">'
-    '<div class="gfr-program-title">&#x1fa7a; Health Assessment Screening</div>'
-    '<div class="gfr-program-desc">Reform staff conduct a free on-site spinal health screening \u2014 checking posture, range of motion, and identifying injury risks for employees.</div>'
-    '<div class="gfr-two">'
-    '<div class="gfr-field"><label class="gfr-label">Interested?</label>'
-    '<select class="gfr-select" id="bol-has-int"><option value="">Select\u2026</option>'
-    '<option>Yes</option><option>Maybe</option><option>No</option><option>N/A</option>'
-    '</select></div>'
-    '<div class="gfr-field"><label class="gfr-label">Follow-Up Date</label>'
-    '<input class="gfr-input" id="bol-has-fu" type="date"></div>'
-    '</div>'
-    '<div class="gfr-field"><label class="gfr-label">Booking Requested?</label>'
-    '<div class="gfr-radio-group">'
-    '<label><input type="radio" name="bol-has-book" value="Yes"> Yes</label>'
-    '<label><input type="radio" name="bol-has-book" value="No"> No</label>'
-    '</div></div>'
-    '<div class="gfr-field"><label class="gfr-label">Notes</label>'
-    '<textarea class="gfr-textarea" id="bol-has-notes" placeholder="Additional notes\u2026"></textarea>'
-    '</div></div>'
-
-    # MMS
-    '<div class="gfr-program">'
-    '<div class="gfr-program-title">&#x1f486; Mobile Massage Service (Employees &amp; Patrons)</div>'
-    '<div class="gfr-program-desc">Reform therapists visit on-site to provide chair or table massage for employees or patrons \u2014 bookable as a one-time or recurring wellness event.</div>'
-    '<div class="gfr-two">'
-    '<div class="gfr-field"><label class="gfr-label">Interested?</label>'
-    '<select class="gfr-select" id="bol-mms-int"><option value="">Select\u2026</option>'
-    '<option>Yes</option><option>Maybe</option><option>No</option><option>N/A</option>'
-    '</select></div>'
-    '<div class="gfr-field"><label class="gfr-label">Follow-Up Date</label>'
-    '<input class="gfr-input" id="bol-mms-fu" type="date"></div>'
-    '</div>'
-    '<div class="gfr-field"><label class="gfr-label">Booking Requested?</label>'
-    '<div class="gfr-radio-group">'
-    '<label><input type="radio" name="bol-mms-book" value="Yes"> Yes</label>'
-    '<label><input type="radio" name="bol-mms-book" value="No"> No</label>'
-    '</div></div>'
-    '<div class="gfr-field"><label class="gfr-label">Notes</label>'
-    '<textarea class="gfr-textarea" id="bol-mms-notes" placeholder="Additional notes\u2026"></textarea>'
-    '</div></div>'
-    '</div>'  # end programs section
 
     # Gifted
     '<div class="gfr-section">'
@@ -368,14 +294,9 @@ function bolReset(){
   document.getElementById('gfr-user-bol').textContent=GFR_USER;
   document.getElementById('bol-employee').value=GFR_USER;
   ['bol-biz-name','bol-poc-name','bol-poc-phone','bol-poc-email','bol-address',
-   'bol-ll-fu','bol-has-fu','bol-mms-fu',
-   'bol-ll-notes','bol-has-notes','bol-mms-notes',
    'bol-consults','bol-massages'
   ].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
-  ['bol-ll-int','bol-has-int','bol-mms-int'].forEach(function(id){
-    var el=document.getElementById(id);if(el)el.selectedIndex=0;
-  });
-  document.querySelectorAll('input[name="bol-mbox"],input[name="bol-ll-book"],input[name="bol-has-book"],input[name="bol-mms-book"]')
+  document.querySelectorAll('input[name="bol-mbox"]')
     .forEach(function(r){r.checked=false;});
   var body=document.getElementById('gfr-body-bol');if(body)body.style.display='';
   var foot=document.querySelector('#gfr-form-bol .gfr-footer');if(foot)foot.style.display='';
@@ -405,18 +326,6 @@ async function bolSubmit(){
     contact_email:         email,
     business_address:      addr,
     massage_box_left:      mbox.value,
-    ll_interested:         document.getElementById('bol-ll-int').value,
-    ll_follow_up_date:     document.getElementById('bol-ll-fu').value,
-    ll_booking_requested:  (document.querySelector('input[name="bol-ll-book"]:checked')||{}).value||'',
-    ll_notes:              document.getElementById('bol-ll-notes').value,
-    has_interested:        document.getElementById('bol-has-int').value,
-    has_follow_up_date:    document.getElementById('bol-has-fu').value,
-    has_booking_requested: (document.querySelector('input[name="bol-has-book"]:checked')||{}).value||'',
-    has_notes:             document.getElementById('bol-has-notes').value,
-    mms_interested:        document.getElementById('bol-mms-int').value,
-    mms_follow_up_date:    document.getElementById('bol-mms-fu').value,
-    mms_booking_requested: (document.querySelector('input[name="bol-mms-book"]:checked')||{}).value||'',
-    mms_notes:             document.getElementById('bol-mms-notes').value,
     consultations_gifted:  document.getElementById('bol-consults').value||'0',
     massages_gifted:       document.getElementById('bol-massages').value||'0',
   };

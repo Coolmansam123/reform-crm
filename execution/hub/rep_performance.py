@@ -24,6 +24,7 @@ from .access import _is_admin
 from .constants import (
     T_ACTIVITIES, T_GOR_ROUTE_STOPS, T_LEADS, T_STAFF,
 )
+from .tz import local_today as _local_today
 
 
 def _sv(v):
@@ -51,7 +52,7 @@ def _windows(range_key: str) -> tuple[_date, _date, _date, _date]:
     """Return (current_start, current_end, prev_start, prev_end) for a range key.
     Both windows are [start, end] inclusive on `end` (today)."""
     days = {"7d": 7, "30d": 30, "90d": 90}.get(range_key, 7)
-    today = _date.today()
+    today = _local_today()
     cur_start  = today - _td(days=days - 1)
     prev_end   = cur_start - _td(days=1)
     prev_start = prev_end - _td(days=days - 1)

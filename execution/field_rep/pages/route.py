@@ -10,17 +10,17 @@ from hub.shared import (
 from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
 from hub.contact_detail import contact_actions_js
 from hub.lead_capture_ui import LEAD_CAPTURE_HTML, build_lead_capture_js
+from hub.tz import local_today
 
 
 def _mobile_route_page(br: str, bt: str, user: dict = None,
                        route_id: int = None) -> str:
     """Renders the full-screen route map. If route_id is given, loads that
     specific route; otherwise loads the caller's active/draft route for today."""
-    import datetime
     gk      = os.environ.get("GOOGLE_MAPS_API_KEY", "")
     gmap_id = os.environ.get("GOOGLE_MAPS_MAP_ID", "")
     user = user or {}
-    today_str = datetime.date.today().isoformat()
+    today_str = local_today().isoformat()
     user_email = user.get('email', '')
     user_name = user.get('name', '')
     # Endpoint is chosen server-side so the same JS handles both paths.

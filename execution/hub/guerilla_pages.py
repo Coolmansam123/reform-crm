@@ -1006,8 +1006,8 @@ load();
 
 
 def _gorilla_routes_new_page(br: str, bt: str, user: dict = None) -> str:
-    import datetime
-    today_str = datetime.date.today().isoformat()
+    from .tz import local_today
+    today_str = local_today().isoformat()
     user = user or {}
     user_email = user.get('email', '')
     header = (
