@@ -5,7 +5,7 @@ import os
 from hub.shared import (
     _mobile_page,
     T_GOR_VENUES, T_GOR_BOXES, T_GOR_ROUTES, T_GOR_ROUTE_STOPS, T_LEADS,
-    T_COMPANIES,
+    T_COMPANIES, T_EVENTS,
 )
 from hub.guerilla import GFR_EXTRA_HTML, GFR_EXTRA_JS
 from hub.maps import MAP_PALETTE_JS, OFFICE_PIN_JS, map_script_url
@@ -20,20 +20,71 @@ _HOME_CSS = """
 #home-root[data-state="B"] .only-c { display:none }
 #home-root[data-state="C"] .only-a,
 #home-root[data-state="C"] .only-b { display:none }
-.qlog-row { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:18px }
-.qlog-btn { background:var(--card); border:1px solid var(--border); border-radius:10px;
-            padding:12px 6px; font-size:12px; font-weight:600; color:var(--text);
+.qlog-row { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:18px }
+.qlog-btn { background:var(--card); border:1px solid var(--border); border-radius:12px;
+            padding:14px 6px; font-size:12px; font-weight:600; color:var(--text);
             text-align:center; cursor:pointer; text-decoration:none;
-            display:flex; flex-direction:column; align-items:center; gap:4px;
-            font-family:inherit; min-height:64px; line-height:1.2 }
+            display:flex; flex-direction:column; align-items:center; gap:6px;
+            font-family:inherit; min-height:72px; line-height:1.2 }
 .qlog-btn:active { background:rgba(0,74,198,.08) }
-.qlog-btn .material-symbols-outlined { font-size:22px; color:#004ac6 }
+.qlog-btn .material-symbols-outlined { font-size:24px; color:#004ac6 }
 .qlog-btn[data-active="1"] { background:#004ac6; border-color:#004ac6; color:#fff }
 .qlog-btn[data-active="1"] .material-symbols-outlined { color:#fff }
-.status-strip { font-size:12px; color:var(--text3); margin-bottom:14px;
-                display:flex; gap:6px; flex-wrap:wrap; align-items:center }
-.status-strip a { color:var(--text2); text-decoration:none; font-weight:600 }
-.status-strip .sep { color:var(--text4) }
+
+/* KPI strip */
+#kpi-strip { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:18px }
+.kpi-card { background:var(--card); border:1px solid var(--border); border-radius:12px;
+            padding:12px 8px; text-align:center; text-decoration:none; color:inherit;
+            display:block }
+.kpi-card:active { background:rgba(0,74,198,.06) }
+.kpi-label { font-size:10px; font-weight:600; color:var(--text3);
+             letter-spacing:.6px; margin-bottom:4px }
+.kpi-val { font-size:22px; font-weight:700; color:var(--text); line-height:1 }
+
+/* Events strip */
+#events-strip { margin-bottom:18px }
+.strip-hdr { display:flex; align-items:baseline; justify-content:space-between;
+             margin-bottom:8px }
+.strip-link { font-size:11px; color:var(--text3); text-decoration:none }
+#events-rail { display:flex; gap:10px; overflow-x:auto;
+               -webkit-overflow-scrolling:touch; scrollbar-width:none;
+               padding-bottom:4px }
+#events-rail::-webkit-scrollbar { display:none }
+.event-card { min-width:180px; padding:12px; border-radius:10px;
+              border:1px solid var(--border); background:var(--card);
+              text-decoration:none; color:inherit; flex-shrink:0;
+              display:flex; flex-direction:column; gap:2px }
+.event-when { font-size:10px; font-weight:700; color:#004ac6;
+              letter-spacing:.4px; margin-bottom:2px; text-transform:uppercase }
+.event-name { font-size:13px; font-weight:600; color:var(--text);
+              display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+              overflow:hidden }
+.event-where { font-size:11px; color:var(--text3);
+               white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.event-empty { color:var(--text3); font-size:12px; padding:14px;
+               border:1px dashed var(--border); border-radius:10px;
+               width:100%; text-align:center; flex-shrink:0 }
+
+/* Leaderboard */
+#leaderboard-card { background:var(--card); border:1px solid var(--border);
+                    border-radius:12px; padding:12px 14px; margin-bottom:18px }
+.lb-hdr { display:flex; align-items:baseline; justify-content:space-between;
+          margin-bottom:8px }
+.lb-metric { font-size:11px; color:var(--text3) }
+.lb-row { display:grid; grid-template-columns:24px 1fr auto; gap:10px;
+          align-items:center; padding:6px 0; font-size:13px }
+.lb-row[data-self="1"] { background:rgba(0,74,198,.08); border-radius:6px;
+                         padding:6px 8px; margin:0 -8px }
+.lb-rank { color:var(--text3); font-weight:600; text-align:center }
+.lb-name { color:var(--text); font-weight:500;
+           white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.lb-val { color:#004ac6; font-weight:700 }
+.lb-divider { height:1px; background:var(--border); margin:6px 0 }
+
+/* Worklist count badge */
+#wl-ct { background:#fee2e2; color:#b91c1c; padding:2px 9px;
+         border-radius:999px; font-size:11px; font-weight:600 }
+#wl-ct:empty { display:none }
 .hero-c { padding:18px 20px; color:#fff;
           background:linear-gradient(135deg,#004ac6,#0066ee);
           border-radius:12px; border:none }
@@ -84,7 +135,7 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
 
     body = (
         '<div class="mobile-hdr">'
-        + '<div><div class="mobile-hdr-title">Reform</div>'
+        + '<div><div class="mobile-hdr-title"><img src="/static/reform-logo.png" alt="Reform" style="height:22px;width:auto;display:block"></div>'
         + f'<div class="mobile-hdr-sub">{day_str}</div></div>'
         + '<button class="m-hamburger" onclick="openMDrawer()" aria-label="Menu">☰</button>'
         + '</div>'
@@ -94,11 +145,33 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         # ── Hero slot ──────────────────────────────────────────────────────
         + '<div id="hero-slot" style="margin-bottom:18px">'
         +   '<div class="only-a">'
-        +     f'<div style="font-size:22px;font-weight:700;color:var(--text);margin-bottom:2px">Hey, {first}</div>'
+        +     f'<div style="font-size:26px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Hey, {first}!</div>'
         +     '<div style="font-size:13px;color:var(--text3)">Ready to hit the field?</div>'
         +   '</div>'
         +   '<div class="only-b" id="hero-b"></div>'
         +   '<div class="only-c" id="hero-c"></div>'
+        + '</div>'
+        # ── KPI strip (rep-scoped 7d) ──────────────────────────────────────
+        + '<div id="kpi-strip">'
+        +   '<a href="/lead" class="kpi-card">'
+        +     '<div class="kpi-label">LEADS (7D)</div>'
+        +     '<div class="kpi-val" id="kpi-leads">—</div></a>'
+        +   '<a href="/routes" class="kpi-card">'
+        +     '<div class="kpi-label">VISITS (7D)</div>'
+        +     '<div class="kpi-val" id="kpi-visits">—</div></a>'
+        +   '<a href="/events" class="kpi-card">'
+        +     '<div class="kpi-label">EVENTS</div>'
+        +     '<div class="kpi-val" id="kpi-events">—</div></a>'
+        + '</div>'
+        # ── Recent Events strip ────────────────────────────────────────────
+        + '<div id="events-strip">'
+        +   '<div class="strip-hdr">'
+        +     '<span class="label-caps">Upcoming Events</span>'
+        +     '<a href="/events" class="strip-link">See all →</a>'
+        +   '</div>'
+        +   '<div id="events-rail">'
+        +     '<div class="event-empty">Loading…</div>'
+        +   '</div>'
         + '</div>'
         # ── Quick-log row (3 buttons: Lead / Visit / Event) ────────────────
         + '<div class="qlog-row">'
@@ -118,18 +191,21 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         +   '<div id="hm-map"><div id="hm-map-empty">Loading map…</div></div>'
         +   '<div id="hm-legend"></div>'
         + '</div>'
-        # ── Status strip ───────────────────────────────────────────────────
-        + '<div class="status-strip">'
-        +   '<a href="/routes" id="ss-stops">— stops</a>'
-        +   '<span class="sep">·</span>'
-        +   '<a href="/todo"   id="ss-overdue">— overdue</a>'
-        +   '<span class="sep">·</span>'
-        +   '<a href="/lead"   id="ss-leads">— leads (7d)</a>'
+        # ── Top Performers leaderboard ─────────────────────────────────────
+        + '<div id="leaderboard-card">'
+        +   '<div class="lb-hdr">'
+        +     '<span class="label-caps">Top Performers · 7d</span>'
+        +     '<span class="lb-metric">Leads</span>'
+        +   '</div>'
+        +   '<div id="lb-body">'
+        +     '<div style="color:var(--text3);font-size:12px;text-align:center;padding:8px">Loading…</div>'
+        +   '</div>'
         + '</div>'
         # ── Worklist ───────────────────────────────────────────────────────
         + '<div class="label-caps" style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
         +   '<span class="material-symbols-outlined" style="font-size:14px;color:#ba1a1a">priority_high</span>'
-        +   'Worklist<span id="wl-ct" style="margin-left:auto;color:var(--text4);font-weight:600"></span></div>'
+        +   '<span>Worklist</span>'
+        +   '<span id="wl-ct" style="margin-left:auto"></span></div>'
         + '<div id="wl-body" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">'
         +   '<div class="card" style="color:var(--text3);text-align:center;font-size:13px">Loading…</div>'
         + '</div>'
@@ -149,6 +225,7 @@ def _mobile_home_page(br: str, bt: str, user: dict = None) -> str:
         f"const T_GOR_ROUTE_STOPS = {T_GOR_ROUTE_STOPS};\n"
         f"const T_LEADS = {T_LEADS};\n"
         f"const T_COMPANIES = {T_COMPANIES};\n"
+        f"const T_EVENTS = {T_EVENTS};\n"
         f"const TOOL = {{ venuesT: {T_GOR_VENUES} }};\n"
         f"const HM_GK = {repr(gk)};\n"
         f"const HM_MAP_ID = {repr(gmap_id)};\n"
@@ -402,17 +479,75 @@ function hmAutoPan(activeStop, lat, lng) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Events rail + Top Performers renderers
+// ═══════════════════════════════════════════════════════════════════════
+function _hmRelDate(iso) {
+  // Returns a short relative label: "Today", "Tomorrow", weekday, or "Mon 8".
+  if (!iso) return '';
+  const d = String(iso).slice(0, 10);
+  const t = new Date().toISOString().slice(0, 10);
+  const ms = new Date(d).getTime() - new Date(t).getTime();
+  const days = Math.round(ms / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  const dt = new Date(d + 'T00:00:00');
+  if (days > 1 && days < 7) return dt.toLocaleDateString('en-US', { weekday: 'short' });
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+function hmRenderEventsStrip(upcoming) {
+  const rail = document.getElementById('events-rail');
+  if (!rail) return;
+  if (!upcoming || !upcoming.length) {
+    rail.innerHTML = '<div class="event-empty">No events in the next 7 days</div>';
+    return;
+  }
+  const sorted = upcoming.slice()
+    .sort((a, b) => (a['Event Date'] || '').localeCompare(b['Event Date'] || ''))
+    .slice(0, 6);
+  rail.innerHTML = sorted.map(e => {
+    const when  = _hmRelDate(e['Event Date']);
+    const name  = esc(e['Name'] || 'Event');
+    const where = esc(e['Venue Address'] || e['Event Type'] || '');
+    return '<a class="event-card" href="/events">' +
+             '<div class="event-when">' + esc(when) + '</div>' +
+             '<div class="event-name">' + name + '</div>' +
+             (where ? '<div class="event-where">' + where + '</div>' : '') +
+           '</a>';
+  }).join('');
+}
+function hmRenderLeaderboard(lb) {
+  const body = document.getElementById('lb-body');
+  if (!body) return;
+  if (!lb || !Array.isArray(lb.top) || !lb.top.length) {
+    body.innerHTML = '<div style="color:var(--text3);font-size:12px;text-align:center;padding:8px">No activity yet this week</div>';
+    return;
+  }
+  const _row = (r) => '<div class="lb-row" data-self="' + (r.is_self ? '1' : '0') + '">' +
+                        '<span class="lb-rank">' + r.rank + '</span>' +
+                        '<span class="lb-name">' + esc(r.is_self ? 'You' : r.name) + '</span>' +
+                        '<span class="lb-val">' + r.leads + '</span>' +
+                      '</div>';
+  let html = lb.top.map(_row).join('');
+  if (lb.self) {
+    html += '<div class="lb-divider"></div>' + _row(lb.self);
+  }
+  body.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Home dashboard — main loader.
 // ═══════════════════════════════════════════════════════════════════════
 async function loadHomeDashboard() {
-  const [routes, stops, leads, boxes, companies, venues, overdueRaw] = await Promise.all([
+  const [routes, stops, leads, boxes, companies, venues, events, overdueRaw, lbResp] = await Promise.all([
     fetchAll(T_GOR_ROUTES),
     fetchAll(T_GOR_ROUTE_STOPS),
     fetchAll(T_LEADS),
     fetchAll(T_GOR_BOXES),
     fetchAll(T_COMPANIES),
     fetchAll(T_GOR_VENUES),
-    fetch('/api/outreach/due').then(r => r.ok ? r.json() : []).catch(() => [])
+    fetchAll(T_EVENTS),
+    fetch('/api/outreach/due').then(r => r.ok ? r.json() : []).catch(() => []),
+    fetch('/api/leaderboard?range=7d').then(r => r.ok ? r.json() : null).catch(() => null)
   ]);
   // Active Partners have graduated out of the rep's outreach pipeline.
   const overdueResp = (Array.isArray(overdueRaw) ? overdueRaw : [])
@@ -500,18 +635,35 @@ async function loadHomeDashboard() {
   if (visitLbl) visitLbl.textContent = (PAGE_STATE === 'C') ? 'Mark Visited' : 'Log Visit';
   if (visitBtn) visitBtn.setAttribute('data-active', PAGE_STATE === 'C' ? '1' : '0');
 
-  // ── Status strip ─────────────────────────────────────────────────────
+  // ── KPI strip (rep-scoped 7d) ────────────────────────────────────────
   const sevenDaysAgo = new Date(Date.now() - 7*86400000).toISOString().slice(0, 10);
-  const recentLeads = leads.filter(l => {
+  const overdueCount = Array.isArray(overdueResp) ? overdueResp.length : 0;
+  const myLeads7d = leads.filter(l => {
+    if ((l['Owner'] || '').trim().toLowerCase() !== USER_EMAIL) return false;
     const d = (l['Created'] || l['Date'] || '').slice(0, 10);
     return d && d >= sevenDaysAgo;
   }).length;
-  const overdueCount = Array.isArray(overdueResp) ? overdueResp.length : 0;
-  document.getElementById('ss-stops').textContent = todayRoute
-    ? (visitedToday + ' of ' + todayStops.length + ' stops')
-    : '0 stops today';
-  document.getElementById('ss-overdue').textContent = overdueCount + ' overdue';
-  document.getElementById('ss-leads').textContent = recentLeads + ' leads (7d)';
+  const myVisits7d = stops.filter(s => {
+    if ((s['Completed By'] || '').trim().toLowerCase() !== USER_EMAIL) return false;
+    if (sv(s['Status']) !== 'Visited') return false;
+    const d = (s['Completed At'] || '').slice(0, 10);
+    return d && d >= sevenDaysAgo;
+  }).length;
+  const upcomingEvents = (events || []).filter(e => {
+    const status = sv(e['Event Status']);
+    if (status && status !== 'Scheduled' && status !== 'Active' && status !== 'Upcoming') return false;
+    const d = (e['Event Date'] || '').slice(0, 10);
+    return d && d >= today;
+  });
+  document.getElementById('kpi-leads').textContent  = myLeads7d;
+  document.getElementById('kpi-visits').textContent = myVisits7d;
+  document.getElementById('kpi-events').textContent = upcomingEvents.length;
+
+  // ── Recent Events rail ───────────────────────────────────────────────
+  hmRenderEventsStrip(upcomingEvents);
+
+  // ── Top Performers ───────────────────────────────────────────────────
+  hmRenderLeaderboard(lbResp);
 
   // ── Build map layer data ─────────────────────────────────────────────
   // Route layer: today's stops, ordered, with venue lat/lng fallback

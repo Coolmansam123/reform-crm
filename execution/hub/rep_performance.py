@@ -70,21 +70,11 @@ def _delta_pct(curr: int, prev: int) -> int:
     return int(round((curr - prev) / prev * 100))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /api/admin/rep-performance?range=7d|30d|90d
-# Returns {range, current: {start,end}, previous: {...}, reps: [...]}
-# ─────────────────────────────────────────────────────────────────────────────
-async def get_rep_performance(request, br: str, bt: str, user: dict,
-                              cached_rows) -> JSONResponse:
-    if not _is_admin(user):
-        return JSONResponse({"error": "admin only"}, status_code=403)
-    rk = (request.query_params.get("range") or "7d").lower()
-    if rk not in ("7d", "30d", "90d"):
-        rk = "7d"
+async def _aggregate_reps(cached_rows, rk: str):
+    """Shared aggregation used by both the admin perf endpoint and the
+    rep-callable leaderboard. Returns (reps, cur_start, cur_end, prev_start, prev_end)."""
     cur_start, cur_end, prev_start, prev_end = _windows(rk)
 
-    # Pull every table we need — all are warm-cached; full table scan in Python
-    # is fine at current data sizes (tens of thousands of rows max).
     stops, leads, acts, staff = [], [], [], []
     try: stops = await cached_rows(T_GOR_ROUTE_STOPS) or []
     except Exception: pass
@@ -95,14 +85,12 @@ async def get_rep_performance(request, br: str, bt: str, user: dict,
     try: staff = await cached_rows(T_STAFF) or []
     except Exception: pass
 
-    # Build rep-name lookup keyed by lowercase email.
     rep_name: dict[str, str] = {}
     for s in staff:
         e = (s.get("Email") or "").strip().lower()
         if e:
             rep_name[e] = (s.get("Name") or s.get("Full Name") or e).strip() or e
 
-    # Counters: per-email per-metric, current + prior window.
     metrics = ("stops", "leads", "convs", "acts")
     cur: dict[str, dict[str, int]] = defaultdict(lambda: {m: 0 for m in metrics})
     prv: dict[str, dict[str, int]] = defaultdict(lambda: {m: 0 for m in metrics})
@@ -111,25 +99,19 @@ async def get_rep_performance(request, br: str, bt: str, user: dict,
         if not email: return
         bucket[email.lower().strip()][key] += 1
 
-    # Stops — Completed By email, Status=Visited, Completed At date.
     for r in stops:
-        if _sv(r.get("Status")) != "Visited":
-            continue
+        if _sv(r.get("Status")) != "Visited": continue
         email = (r.get("Completed By") or "").strip()
         d = _parse_iso_date(r.get("Completed At"))
-        if not email or not d:
-            continue
-        if _in_window(d, cur_start, cur_end):  _bump(cur, email, "stops")
+        if not email or not d: continue
+        if _in_window(d, cur_start, cur_end):    _bump(cur, email, "stops")
         elif _in_window(d, prev_start, prev_end): _bump(prv, email, "stops")
 
-    # Leads — Owner email, Created date. Conversions tracked separately.
     for L in leads:
         email = (L.get("Owner") or "").strip()
-        if not email:
-            continue
+        if not email: continue
         d = _parse_iso_date(L.get("Created") or L.get("Date"))
-        if not d:
-            continue
+        if not d: continue
         is_conv = _sv(L.get("Status")) == "Converted"
         if _in_window(d, cur_start, cur_end):
             _bump(cur, email, "leads")
@@ -138,21 +120,15 @@ async def get_rep_performance(request, br: str, bt: str, user: dict,
             _bump(prv, email, "leads")
             if is_conv: _bump(prv, email, "convs")
 
-    # Activities — Author email, Date or Created.
     for a in acts:
         email = (a.get("Author") or "").strip()
-        if not email:
-            continue
-        if _sv(a.get("Kind")) and _sv(a.get("Kind")) != "user_activity":
-            # Allow blank Kind (legacy rows) but skip system kinds (e.g. 'system_log').
-            continue
+        if not email: continue
+        if _sv(a.get("Kind")) and _sv(a.get("Kind")) != "user_activity": continue
         d = _parse_iso_date(a.get("Date") or a.get("Created"))
-        if not d:
-            continue
+        if not d: continue
         if _in_window(d, cur_start, cur_end):    _bump(cur, email, "acts")
         elif _in_window(d, prev_start, prev_end): _bump(prv, email, "acts")
 
-    # Build the per-rep response.
     all_emails = set(cur.keys()) | set(prv.keys())
     reps = []
     for email in all_emails:
@@ -168,11 +144,70 @@ async def get_rep_performance(request, br: str, bt: str, user: dict,
             "conversion_pct": conv_pct,
         })
     reps.sort(key=lambda r: (-r["stops"], -r["leads"], r["name"].lower()))
+    return reps, cur_start, cur_end, prev_start, prev_end
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/admin/rep-performance?range=7d|30d|90d
+# Returns {range, current: {start,end}, previous: {...}, reps: [...]}
+# ─────────────────────────────────────────────────────────────────────────────
+async def get_rep_performance(request, br: str, bt: str, user: dict,
+                              cached_rows) -> JSONResponse:
+    if not _is_admin(user):
+        return JSONResponse({"error": "admin only"}, status_code=403)
+    rk = (request.query_params.get("range") or "7d").lower()
+    if rk not in ("7d", "30d", "90d"):
+        rk = "7d"
+    reps, cur_start, cur_end, prev_start, prev_end = await _aggregate_reps(cached_rows, rk)
     return JSONResponse({
         "range":    rk,
         "current":  {"start": cur_start.isoformat(),  "end": cur_end.isoformat()},
         "previous": {"start": prev_start.isoformat(), "end": prev_end.isoformat()},
         "reps":     reps,
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/leaderboard?range=7d|30d|90d
+# Rep-callable trimmed view: top 3 by leads + caller's row if outside top 3.
+# Used by the rep home page Top Performers card.
+# ─────────────────────────────────────────────────────────────────────────────
+async def rep_leaderboard(request, br: str, bt: str, user: dict,
+                          cached_rows) -> JSONResponse:
+    rk = (request.query_params.get("range") or "7d").lower()
+    if rk not in ("7d", "30d", "90d"):
+        rk = "7d"
+    reps, cur_start, cur_end, _ps, _pe = await _aggregate_reps(cached_rows, rk)
+
+    # Re-rank by leads (the metric the home card displays). Ties broken by
+    # conversions then name so output is stable.
+    ranked = sorted(reps, key=lambda r: (-r["leads"], -r["conversions"], r["name"].lower()))
+    me_email = (user.get("email") or "").strip().lower()
+
+    def _row(r, rank):
+        return {
+            "rank":    rank,
+            "name":    r["name"],
+            "leads":   r["leads"],
+            "is_self": (r["email"] or "").lower() == me_email,
+        }
+
+    top = [_row(r, i + 1) for i, r in enumerate(ranked[:3])]
+    self_row = None
+    if me_email:
+        my_idx = next((i for i, r in enumerate(ranked) if (r["email"] or "").lower() == me_email), -1)
+        if my_idx >= 3:
+            self_row = _row(ranked[my_idx], my_idx + 1)
+        elif my_idx == -1:
+            # Caller has zero activity in window — show as 0 with rank = total + 1.
+            self_row = {"rank": len(ranked) + 1, "name": user.get("name") or "You",
+                        "leads": 0, "is_self": True}
+
+    return JSONResponse({
+        "range":   rk,
+        "current": {"start": cur_start.isoformat(), "end": cur_end.isoformat()},
+        "top":     top,
+        "self":    self_row,
     })
 
 

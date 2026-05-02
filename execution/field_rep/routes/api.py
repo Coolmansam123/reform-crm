@@ -212,6 +212,17 @@ async def outreach_skipped(request: Request):
     return await outreach_api.get_skipped_stops(br, bt, session, _cached_rows)
 
 
+# ─── Leaderboard (Top Performers card on the rep home) ──────────────────────
+@router.get("/api/leaderboard")
+async def leaderboard(request: Request):
+    session = await get_session(request)
+    if not session:
+        return JSONResponse({"error": "unauthenticated"}, status_code=401)
+    from hub import rep_performance
+    br, bt = _env()
+    return await rep_performance.rep_leaderboard(request, br, bt, session, _cached_rows)
+
+
 # ─── Companies: read + activity log (mobile detail page uses these) ─────────
 async def _invalidate_async(*tids: int) -> None:
     await _invalidate(*tids)
